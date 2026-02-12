@@ -120,6 +120,14 @@ export function generateMesocycle(config: MesocycleConfig): Mesocycle {
           volumeMultiplier
         )
 
+        // Debug: Log session generation summary (only for week 1)
+        if (weekNum === 1) {
+          console.log(`[Mesocycle] ${plannedSession.day} ${plannedSession.sessionType}: ${generatedSession.exercises.length} exercises, ${generatedSession.totalSets} sets`)
+          generatedSession.exercises.forEach((ex, i) => {
+            console.log(`  ${i + 1}. ${ex.exercise.name} (${ex.muscle}) - ${ex.sets} sets`)
+          })
+        }
+
         return {
           id: `${mesocycleId}_w${weekNum}_s${index}`,
           dayOfWeek: plannedSession.day,

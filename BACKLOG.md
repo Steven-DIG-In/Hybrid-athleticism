@@ -1,104 +1,113 @@
 # Hybrid Athleticism - Backlog
 
+**Last Updated:** February 5, 2026
+
+---
+
+## Critical - MVP Blockers 🚨
+
+### Onboarding → Database Integration
+- [ ] **Save mesocycle to database** - `step-program-generation.tsx` generates but doesn't call `saveMesocycleToDatabase()`
+- [ ] **Save lift maxes** - Call `saveLiftMax()` for each lift during onboarding completion
+- [ ] **Save volume landmarks** - Call `saveVolumeLandmarks()` during onboarding completion
+
+### Today Page
+- [ ] **Load today's session from DB** - Currently shows empty state because nothing is persisted
+- [ ] **Add "Start Workout" button** - Clear navigation to `/session/[id]/execute`
+
+### Session Flow
+- [ ] **Verify session execution works end-to-end** - Load planned → Log sets → Save actual
+
+---
+
 ## High Priority
-
-### Running → Cardio Refactor
-- [ ] Rename `running` → `cardio` in DB enum (`training_domain_type`) — *requires DB migration*
-- [x] Update TypeScript types throughout (onboarding store updated)
-- [x] Add `activity_type` field to cardio sessions (running, rowing, swimming, cycling, air bike)
-- [x] Update onboarding "Running Goals" → "Cardio Goals" with activity selection
-- [x] Add VO2 Max as a cardio training focus option
-- [x] Update all UI labels and icons
-
-### Onboarding UX Fixes
-- [x] **BUG FIX**: Wizard looping back to start after completion (fixed: changed update → upsert)
-- [x] Domain priorities: Improve "Maintenance" selection visibility (added amber highlight + border)
-- [ ] Priority muscle groups: Refine category selection UX (needs work on groupings/presentation)
-- [x] Volume Landmarks: Add better explanation of RP terminology (info panel shown by default with examples)
-- [x] Equipment Access: Add Air Bike, Rower, Spin Bike to cardio
-- [x] Equipment Access: Add Rings to stations, moved Dip Bars to stations
-
-### Mobile-First UX
-- [ ] Audit all components for touch targets (min 44px)
-- [ ] Ensure inputs are thumb-friendly (bottom of screen when possible)
-- [ ] Large, tappable buttons during workout logging
-- [ ] Swipe gestures for common actions (complete set, next exercise)
-- [ ] Haptic feedback on key actions (if supported)
-- [ ] Test on actual devices (iOS Safari, Android Chrome)
-- [ ] Prevent accidental navigation during active workout
-
-### Theme Support (Light/Dark)
-- [ ] Add theme context/provider
-- [ ] Define color tokens for both themes
-- [ ] Update Tailwind config with CSS variables
-- [ ] Add theme toggle in Settings
-- [ ] Respect system preference by default (`prefers-color-scheme`)
-- [ ] Persist preference to localStorage/user profile
 
 ### Settings / Profile Page
 - [ ] Build functional Settings page (currently a stub)
-- [ ] Profile section: Edit name, weight, height, DOB
+- [ ] Profile section: Edit name, weight, height
 - [ ] Training section: Edit training levels, training age
 - [ ] Availability section: Edit available days, session duration
-- [ ] Domain priorities section: Edit strength/cardio/rucking priorities
 - [ ] Equipment section: Edit equipment inventory
 - [ ] Volume landmarks section: Edit MV/MEV/MAV/MRV per muscle group
-- [ ] Goals section: Edit strength and cardio goals
-- [ ] Garmin section: Connect/disconnect, sync settings
-- [ ] Reuse onboarding components where possible (DRY)
+- [ ] Reuse onboarding components where possible
+
+### Progress Tracking
+- [ ] E1RM trend charts per lift
+- [ ] Volume over time graphs
+- [ ] Recent PRs display
+
+### Error Handling
+- [ ] Add user-friendly error messages for DB failures
+- [ ] Loading states for async operations
+- [ ] Graceful fallbacks when data is missing
 
 ---
 
 ## Medium Priority
 
-### Program Generation
-- [x] Build program generator from user preferences (in-memory)
-- [x] Display weekly schedule on Today page
-- [x] Create full Program page with weekly view
-- [ ] Persist generated program to database (planned_sessions table)
-- [ ] Allow manual adjustments to generated schedule
+### Mobile-First UX
+- [ ] Audit all components for touch targets (min 44px)
+- [ ] Large, tappable buttons during workout logging
+- [ ] Swipe gestures for common actions
+- [ ] Test on actual devices (iOS Safari, Android Chrome)
 
-### Complete Onboarding Data Flow
-- [ ] Save domain priorities to `training_domains` table
-- [ ] Save equipment to user profile or new table
-- [ ] Save volume landmarks to `muscle_group_config` table
-- [ ] Actually generate mesocycle records in database
+### Theme Support (Light/Dark)
+- [ ] Add theme context/provider
+- [ ] Define color tokens for both themes
+- [ ] Add theme toggle in Settings
+- [ ] Respect system preference by default
 
-### Garmin Integration
-- [ ] Implement OAuth flow
-- [ ] **Pull**: Sync completed activities automatically
-- [ ] Map Garmin activity types to our cardio types
-- [ ] **Push**: Send planned workouts to Garmin watch (like TrainingPeaks)
-  - Structured strength workouts
-  - Cardio workouts with targets (pace, HR zones, intervals)
-  - Requires Garmin Connect IQ or Workout API
-
-### Program Generation
-- [ ] Build mesocycle generator based on:
-  - Domain priorities
-  - Available days
-  - Training level
-  - Volume landmarks
-- [ ] Create microcycle (weekly) breakdown
-- [ ] Generate planned sessions with exercises
+### Onboarding UX Refinements
+- [ ] Priority muscle groups: Improve category selection UX
+- [ ] Running → Cardio DB migration (rename `training_domain_type` enum)
 
 ---
 
 ## Low Priority / Future
 
-### Progress Tracking
-- [ ] E1RM trend charts
-- [ ] Volume over time graphs
-- [ ] Cardio metrics (pace, distance, load)
-- [ ] Body weight tracking
+### Garmin Integration
+- [ ] OAuth flow
+- [ ] Pull: Sync completed activities
+- [ ] Push: Send planned workouts to watch
 
 ### Advanced RP Features
+- [ ] PR celebration screen
 - [ ] Fatigue accumulation tracking
 - [ ] Auto-deload recommendations
-- [ ] Volume landmark adjustments based on performance
-- [ ] Readiness scores
+- [ ] Exercise substitution suggestions
 
-### Social / Export
+### Export / Social
 - [ ] Export workout history
 - [ ] Share achievements
-- [ ] Coach view (if applicable)
+
+---
+
+## Completed ✅
+
+### Database Schema
+- [x] All strength tables created with RLS policies
+- [x] `mesocycle-service.ts` with full CRUD operations
+
+### Core Utilities
+- [x] E1RM calculator (Epley formula)
+- [x] Training Max calculation
+- [x] Volume progression helpers
+
+### Onboarding Flow
+- [x] Multi-step wizard with all data collection
+- [x] Lift assessment step (collects data, needs persistence)
+- [x] Volume landmarks step
+- [x] Mesocycle generation (in-memory)
+
+### Workout Logger
+- [x] Load planned exercises from DB
+- [x] Display suggested weights
+- [x] Real-time E1RM calculation
+- [x] Set logging to database
+
+### Cardio Refactor (UI Only)
+- [x] Update TypeScript types (running → cardio)
+- [x] Add `activity_type` field to cardio sessions
+- [x] Update onboarding "Running Goals" → "Cardio Goals"
+- [x] Add VO2 Max as training focus option
+- [x] Add cardio equipment (Air Bike, Rower, Spin Bike)

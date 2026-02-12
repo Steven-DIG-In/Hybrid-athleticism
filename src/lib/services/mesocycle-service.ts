@@ -108,20 +108,36 @@ export async function saveMesocycleToDatabase(
       }
     }
 
-    const { data: insertedSessions, error: sessionsError } = await getTable(supabase, 'planned_sessions')
+    const { error: sessionsError } = await getTable(supabase, 'planned_sessions')
       .insert(sessionsToInsert)
-      .select('id')
 
-    if (sessionsError || !insertedSessions) {
+    if (sessionsError) {
       console.error('Error inserting sessions:', sessionsError)
       // Rollback mesocycle
       await getTable(supabase, 'mesocycles').delete().eq('id', mesocycleId)
       return null
     }
 
-    const sessionsWithIds = insertedSessions as Array<{ id: string }>
+    // IMPORTANT: Fetch all inserted sessions to match them back to our local data
+    const { data: insertedSessions, error: fetchError } = await getTable(supabase, 'planned_sessions')
+      .select('id, scheduled_date, session_type, domain')
+      .eq('mesocycle_id', mesocycleId)
+
+    if (fetchError || !insertedSessions) {
+      console.error('Error fetching inserted sessions:', fetchError)
+      await getTable(supabase, 'mesocycles').delete().eq('id', mesocycleId)
+      return null
+    }
+
+    const castedInsertedSessions = insertedSessions as Array<{
+      id: string
+      scheduled_date: string
+      session_type: string
+      domain: string
+    }>
 
     // 3. Insert planned exercises for each session
+    // We map back by matching date, type, and domain to handle potential DB reordering
     const exercisesToInsert: Array<{
       planned_session_id: string
       exercise_id: string
@@ -140,8 +156,22 @@ export async function saveMesocycleToDatabase(
     }> = []
 
     for (const { sessionIndex: sIdx, exercises } of sessionExercises) {
-      const sessionId = sessionsWithIds[sIdx]?.id
-      if (!sessionId) continue
+      // Get the original session data to match against
+      const originalSession = sessionsToInsert[sIdx]
+
+      // Find the matching inserted session
+      const matchedSession = castedInsertedSessions.find(s =>
+        s.scheduled_date === originalSession.scheduled_date &&
+        s.session_type === originalSession.session_type &&
+        s.domain === originalSession.domain
+      )
+
+      if (!matchedSession) {
+        console.warn(`[Mesocycle Service] Could not find matching DB session for ${originalSession.session_type} on ${originalSession.scheduled_date}`)
+        continue
+      }
+
+      const sessionId = matchedSession.id
 
       exercises.forEach((ex, order) => {
         // Find training max for this exercise if available
@@ -173,22 +203,36 @@ export async function saveMesocycleToDatabase(
     }
 
     if (exercisesToInsert.length > 0) {
-      console.log(`[Mesocycle Service] Inserting ${exercisesToInsert.length} planned exercises across ${sessionsWithIds.length} sessions`)
+      // Log exercises per session for debugging
+      const exercisesBySession = exercisesToInsert.reduce((acc, ex) => {
+        acc[ex.planned_session_id] = (acc[ex.planned_session_id] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
 
-      const { error: exercisesError } = await getTable(supabase, 'planned_exercises')
+      console.log(`[Mesocycle Service] Inserting ${exercisesToInsert.length} planned exercises:`)
+      Object.entries(exercisesBySession).forEach(([sessionId, count]) => {
+        console.log(`  - Session ${sessionId.slice(-8)}: ${count} exercises`)
+      })
+
+      const { data: insertedExercises, error: exercisesError } = await getTable(supabase, 'planned_exercises')
         .insert(exercisesToInsert)
+        .select('id, planned_session_id, exercise_id')
 
       if (exercisesError) {
-        console.error('Error inserting exercises:', exercisesError)
+        console.error('[Mesocycle Service] Error inserting exercises:', exercisesError)
         // Don't rollback - sessions are still useful
       } else {
-        console.log(`[Mesocycle Service] Successfully inserted ${exercisesToInsert.length} exercises`)
+        const insertedCount = (insertedExercises as unknown[])?.length || 0
+        console.log(`[Mesocycle Service] Successfully inserted ${insertedCount} exercises`)
+        if (insertedCount !== exercisesToInsert.length) {
+          console.warn(`[Mesocycle Service] WARNING: Expected ${exercisesToInsert.length} but only ${insertedCount} were inserted!`)
+        }
       }
     } else {
       console.warn('[Mesocycle Service] WARNING: No exercises to insert!')
     }
 
-    return { mesocycleId, sessionCount: sessionsWithIds.length }
+    return { mesocycleId, sessionCount: castedInsertedSessions.length }
   } catch (error) {
     console.error('Error saving mesocycle:', error)
     return null
@@ -261,6 +305,8 @@ export async function getPlannedSessionForDate(
   const supabase = createClient()
   const dateStr = formatDate(date)
 
+  console.log(`[Mesocycle Service] Looking for session: user=${userId}, date=${dateStr}`)
+
   const { data, error } = await getTable(supabase, 'planned_sessions')
     .select('*')
     .eq('user_id', userId)
@@ -268,9 +314,11 @@ export async function getPlannedSessionForDate(
     .single()
 
   if (error) {
+    console.log(`[Mesocycle Service] No session found for ${dateStr}:`, error.message)
     return null
   }
 
+  console.log(`[Mesocycle Service] Found session: ${(data as DBPlannedSession).session_type}`)
   return data as DBPlannedSession
 }
 

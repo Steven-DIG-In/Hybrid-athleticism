@@ -233,7 +233,7 @@ export function WorkoutLogger({ session, exercises, liftMaxes, userId, history }
 
                 {/* Sets Logger */}
                 <div className="space-y-3">
-                    <div className="grid grid-cols-[40px_1fr_1fr_1fr_40px] gap-2 text-xs text-zinc-500 px-2 uppercase tracking-wider text-center">
+                    <div className="grid grid-cols-[32px_1fr_1fr_1fr_44px] gap-1.5 sm:gap-2 text-xs text-zinc-500 px-1 uppercase tracking-wider text-center">
                         <span>Set</span>
                         <span>kg</span>
                         <span>Reps</span>
@@ -245,16 +245,17 @@ export function WorkoutLogger({ session, exercises, liftMaxes, userId, history }
                         <div
                             key={index}
                             className={cn(
-                                "grid grid-cols-[40px_1fr_1fr_1fr_40px] gap-2 items-center bg-zinc-900 p-2 rounded-lg border transition-colors",
+                                "grid grid-cols-[32px_1fr_1fr_1fr_44px] gap-1.5 sm:gap-2 items-center bg-zinc-900 p-2 rounded-lg border transition-colors",
                                 log.completed ? "border-green-500/30 bg-green-950/10" : "border-zinc-800"
                             )}
                         >
-                            <div className="text-center text-zinc-400 font-medium">{index + 1}</div>
+                            <div className="text-center text-zinc-400 font-medium text-sm">{index + 1}</div>
 
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 placeholder={activeExercise.suggested_weight_kg?.toString() || '-'}
-                                className="bg-zinc-950 border border-zinc-800 rounded p-2 text-center text-white focus:border-blue-500 outline-none"
+                                className="bg-zinc-950 border border-zinc-800 rounded p-2 sm:p-2.5 text-center text-white text-base focus:border-blue-500 outline-none min-w-0"
                                 value={log.weight}
                                 onChange={(e) => updateLog(activeExercise.id, index, 'weight', e.target.value)}
                                 disabled={log.completed}
@@ -262,8 +263,9 @@ export function WorkoutLogger({ session, exercises, liftMaxes, userId, history }
 
                             <input
                                 type="number"
+                                inputMode="numeric"
                                 placeholder={`${activeExercise.rep_range_min}-${activeExercise.rep_range_max}`}
-                                className="bg-zinc-950 border border-zinc-800 rounded p-2 text-center text-white focus:border-blue-500 outline-none"
+                                className="bg-zinc-950 border border-zinc-800 rounded p-2 sm:p-2.5 text-center text-white text-base focus:border-blue-500 outline-none min-w-0"
                                 value={log.reps}
                                 onChange={(e) => updateLog(activeExercise.id, index, 'reps', e.target.value)}
                                 disabled={log.completed}
@@ -271,8 +273,9 @@ export function WorkoutLogger({ session, exercises, liftMaxes, userId, history }
 
                             <input
                                 type="number"
+                                inputMode="numeric"
                                 placeholder={activeExercise.target_rir?.toString()}
-                                className="bg-zinc-950 border border-zinc-800 rounded p-2 text-center text-white focus:border-blue-500 outline-none"
+                                className="bg-zinc-950 border border-zinc-800 rounded p-2 sm:p-2.5 text-center text-white text-base focus:border-blue-500 outline-none min-w-0"
                                 value={log.rir}
                                 onChange={(e) => updateLog(activeExercise.id, index, 'rir', e.target.value)}
                                 disabled={log.completed}
@@ -282,13 +285,13 @@ export function WorkoutLogger({ session, exercises, liftMaxes, userId, history }
                                 onClick={() => completeSet(activeExercise.id, index)}
                                 disabled={log.completed}
                                 className={cn(
-                                    "w-8 h-8 rounded flex items-center justify-center transition-colors",
+                                    "w-10 h-10 rounded-lg flex items-center justify-center transition-colors touch-manipulation",
                                     log.completed
                                         ? "bg-green-500 text-black"
-                                        : "bg-zinc-800 text-zinc-400 hover:bg-green-500/50 hover:text-white"
+                                        : "bg-zinc-800 text-zinc-400 active:bg-green-500/50 active:text-white"
                                 )}
                             >
-                                <Check className="w-4 h-4" />
+                                <Check className="w-5 h-5" />
                             </button>
                         </div>
                     ))}
@@ -296,23 +299,28 @@ export function WorkoutLogger({ session, exercises, liftMaxes, userId, history }
             </div>
 
             {/* Navigation Footer */}
-            <div className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-zinc-900 p-4">
-                <div className="flex justify-between items-center gap-4">
+            <div className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-zinc-900 p-3 pb-safe">
+                <div className="flex justify-between items-center gap-2 max-w-lg mx-auto">
                     <button
                         onClick={() => setActiveExerciseIndex(i => Math.max(0, i - 1))}
                         disabled={activeExerciseIndex === 0}
-                        className="p-3 bg-zinc-900 rounded-lg disabled:opacity-50"
+                        className="p-3 bg-zinc-900 rounded-lg disabled:opacity-30 touch-manipulation active:bg-zinc-800"
                     >
-                        <ArrowLeft className="w-5 h-5 text-zinc-400" />
+                        <ArrowLeft className="w-6 h-6 text-zinc-400" />
                     </button>
 
-                    <div className="flex-1 overflow-x-auto flex gap-1 justify-center py-2">
-                        {exercises.map((_, idx) => (
-                            <div
+                    <div className="flex-1 flex gap-1.5 justify-center items-center py-2 overflow-hidden">
+                        {exercises.map((ex, idx) => (
+                            <button
                                 key={idx}
+                                onClick={() => setActiveExerciseIndex(idx)}
                                 className={cn(
-                                    "w-2 h-2 rounded-full",
-                                    idx === activeExerciseIndex ? "bg-white" : "bg-zinc-800"
+                                    "w-2.5 h-2.5 rounded-full transition-all touch-manipulation",
+                                    idx === activeExerciseIndex
+                                        ? "bg-white w-3 h-3"
+                                        : completedExercises.has(ex.id)
+                                            ? "bg-green-500"
+                                            : "bg-zinc-700"
                                 )}
                             />
                         ))}
@@ -321,9 +329,9 @@ export function WorkoutLogger({ session, exercises, liftMaxes, userId, history }
                     <button
                         onClick={() => setActiveExerciseIndex(i => Math.min(exercises.length - 1, i + 1))}
                         disabled={activeExerciseIndex === exercises.length - 1}
-                        className="p-3 bg-zinc-900 rounded-lg disabled:opacity-50"
+                        className="p-3 bg-zinc-900 rounded-lg disabled:opacity-30 touch-manipulation active:bg-zinc-800"
                     >
-                        <ChevronRight className="w-5 h-5 text-zinc-400" />
+                        <ChevronRight className="w-6 h-6 text-zinc-400" />
                     </button>
                 </div>
             </div>

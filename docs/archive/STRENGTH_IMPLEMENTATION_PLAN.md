@@ -1,5 +1,8 @@
 # Strength/Hypertrophy Implementation Plan
 
+> **ARCHIVED:** February 5, 2026
+> Most items in this plan have been implemented. See [BACKLOG.md](../../BACKLOG.md) for remaining work.
+
 ## Overview
 
 This document outlines the implementation plan for strength/hypertrophy training in Hybrid Athleticism. We're focusing **exclusively** on strength training first, getting it working properly before adding cardio or rucking modalities.

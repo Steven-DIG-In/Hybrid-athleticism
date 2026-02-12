@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-react'
 import { generateMesocycle, type MesocycleConfig } from '@/lib/mesocycle-generator'
-import { saveMesocycleToDatabase, saveLiftMax, saveVolumeLandmarks } from '@/lib/services/mesocycle-service'
+import { saveMesocycleToDatabase, saveLiftMax, saveVolumeLandmarks, getUserLiftMaxes } from '@/lib/services/mesocycle-service'
 import { type Equipment } from '@/lib/exercise-library'
 import { DEFAULT_VOLUME_LANDMARKS } from '@/lib/strength'
 
@@ -91,8 +91,6 @@ export function StepComplete() {
       if (data.liftAssessment?.liftMaxes) {
         for (const lift of data.liftAssessment.liftMaxes) {
           if (lift.e1rm && lift.trainingMax) {
-            // For now, we'll need to map exercise keys to exercise IDs
-            // This is a placeholder - in production you'd look up the exercise ID
             // Map 'calculated' method to 'estimated' for database
             const dbSource = lift.method === 'tested' ? 'tested' : 'estimated' as const
             await saveLiftMax(userId, lift.exerciseKey, {
@@ -105,6 +103,10 @@ export function StepComplete() {
           }
         }
       }
+
+      // Fetch saved lift maxes for suggested weight calculation
+      const savedLiftMaxes = await getUserLiftMaxes(userId)
+      console.log(`[Onboarding] Saved ${savedLiftMaxes.length} lift maxes`)
 
       // Generate mesocycle
       const mesocycleConfig: MesocycleConfig = {
@@ -122,11 +124,12 @@ export function StepComplete() {
 
       const mesocycle = generateMesocycle(mesocycleConfig)
 
-      // Save mesocycle to database
-      const saveResult = await saveMesocycleToDatabase(userId, mesocycle)
+      // Save mesocycle to database with lift maxes for suggested weight calculation
+      const saveResult = await saveMesocycleToDatabase(userId, mesocycle, savedLiftMaxes)
       if (!saveResult) {
-        console.warn('Failed to save mesocycle to database - continuing anyway')
+        throw new Error('Failed to save your training program. Please try again.')
       }
+      console.log(`[Onboarding] Saved mesocycle ${saveResult.mesocycleId} with ${saveResult.sessionCount} sessions`)
 
       // Clear onboarding state
       reset()

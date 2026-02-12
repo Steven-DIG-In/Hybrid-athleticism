@@ -35,28 +35,24 @@ export default function SignupPage() {
       return
     }
 
-    // Create user profile in our users table (minimal - onboarding will fill the rest)
+    // Create or update user profile in our users table
     if (authData.user) {
+      // Use upsert to handle cases where user profile already exists
       const { error: profileError } = await supabase
         .from('users')
-        .insert({
-          auth_id: authData.user.id,
-          email: authData.user.email!,
-        } as never)
+        .upsert(
+          {
+            auth_id: authData.user.id,
+            email: authData.user.email!,
+          } as never,
+          { onConflict: 'auth_id' }
+        )
 
       if (profileError) {
-        // Log the full error details for debugging
-        console.error('Profile creation error:', {
-          message: profileError.message,
-          code: profileError.code,
-          details: profileError.details,
-          hint: profileError.hint,
-        })
-        // Don't block signup if profile creation fails - onboarding will handle profile via upsert
-        // This commonly happens if the user row already exists from a previous attempt
+        console.error('Profile creation error:', profileError)
+        // Still continue - onboarding will handle it
       }
 
-      // Redirect directly to onboarding (no email verification needed for MVP)
       router.push('/onboarding')
       return
     }

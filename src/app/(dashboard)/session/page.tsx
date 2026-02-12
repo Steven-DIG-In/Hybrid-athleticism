@@ -68,14 +68,19 @@ function SessionContent() {
         setUserId(typedUserData.id)
 
         // Get planned session for the requested date
-        const targetDate = dateParam ? new Date(dateParam) : new Date()
+        // Parse date string as local date (not UTC) by appending time
+        const targetDate = dateParam ? new Date(dateParam + 'T12:00:00') : new Date()
+        console.log(`[Session Page] Loading session for date param: "${dateParam}", parsed as local date: ${targetDate.toLocaleDateString()}`)
+
         const plannedSession = await getPlannedSessionForDate(typedUserData.id, targetDate)
+        console.log(`[Session Page] Found session:`, plannedSession ? `${plannedSession.session_type} (${plannedSession.id})` : 'none')
 
         if (plannedSession) {
           setSession(plannedSession)
 
           // Load exercises for this session
           const plannedExercises = await getPlannedExercises(plannedSession.id)
+          console.log(`[Session Page] Loaded ${plannedExercises.length} exercises for session ${plannedSession.id}`)
 
           // Enrich with exercise library data
           const enrichedExercises: ExerciseWithDetails[] = plannedExercises.map(ex => {
@@ -87,7 +92,10 @@ function SessionContent() {
             }
           })
 
+          console.log(`[Session Page] Enriched exercises:`, enrichedExercises.map(e => `${e.exerciseName} (${e.target_muscle})`))
           setExercises(enrichedExercises)
+        } else {
+          console.log(`[Session Page] No session found for user ${typedUserData.id} on ${dateParam}`)
         }
       } catch (error) {
         console.error('Error loading session:', error)
