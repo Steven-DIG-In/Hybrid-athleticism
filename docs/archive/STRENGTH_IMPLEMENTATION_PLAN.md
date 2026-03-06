@@ -1,7 +1,13 @@
-# Strength/Hypertrophy Implementation Plan
+# ⛔ DEPRECATED — DO NOT USE
 
-> **ARCHIVED:** February 5, 2026
-> Most items in this plan have been implemented. See [BACKLOG.md](../../BACKLOG.md) for remaining work.
+> **This file is archived and superseded by `/docs/ai/MASTER_PROMPT.md`.** 
+> **Do NOT reference this file for any schema, onboarding, or programming decisions.** 
+> It reflects an outdated strength-only architecture that has been replaced by the hybrid athlete platform design.
+
+# Strength/Hypertrophy Implementation Plan (ARCHIVED)
+
+> **ARCHIVED:** February 5, 2026 
+> **SUPERSEDED:** February 24, 2026
 
 ## Overview
 

@@ -1,40 +1,58 @@
-'use client'
+"use client"
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Calendar, Dumbbell, TrendingUp, Settings } from 'lucide-react'
-import { cn } from '@/lib/utils'
-
-const navItems = [
-  { href: '/today', icon: Calendar, label: 'Today' },
-  { href: '/log', icon: Dumbbell, label: 'Log' },
-  { href: '/progress', icon: TrendingUp, label: 'Progress' },
-  { href: '/settings', icon: Settings, label: 'Settings' },
-]
+import { usePathname } from "next/navigation"
+import Link from "next/link"
+import { LayoutDashboard, PlusSquare, History, BrainCircuit, Wrench } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 export function BottomNav() {
-  const pathname = usePathname()
+    const pathname = usePathname()
 
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 safe-area-inset-bottom">
-      <div className="flex justify-around items-center h-16">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex flex-col items-center justify-center w-full h-full transition-colors',
-                isActive ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
-              )}
-            >
-              <item.icon className="w-6 h-6" />
-              <span className="text-xs mt-1">{item.label}</span>
-            </Link>
-          )
-        })}
-      </div>
-    </nav>
-  )
+    const tabs = [
+        { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+        { name: "Log", href: "/log", icon: PlusSquare },
+        { name: "History", href: "/history", icon: History },
+        { name: "Coach", href: "/coach", icon: BrainCircuit },
+    ]
+
+    return (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505]/90 backdrop-blur-md border-t border-white/5 pb-safe-area">
+            <div className="flex justify-around items-center h-16 max-w-md mx-auto">
+                {process.env.NODE_ENV === 'development' && (
+                    <Link
+                        href="/admin"
+                        className={cn(
+                            "flex flex-col items-center justify-center w-12 h-full space-y-1 transition-colors",
+                            pathname.startsWith('/admin') ? "text-amber-400" : "text-neutral-600 hover:text-neutral-400"
+                        )}
+                    >
+                        <Wrench className="w-4 h-4" strokeWidth={2} />
+                        <span className="text-[8px] font-mono uppercase">Dev</span>
+                    </Link>
+                )}
+                {tabs.map((tab) => {
+                    const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`)
+
+                    return (
+                        <Link
+                            key={tab.name}
+                            href={tab.href}
+                            className={cn(
+                                "flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors relative group",
+                                isActive ? "text-cyan-400" : "text-neutral-500 hover:text-neutral-300"
+                            )}
+                        >
+                            {/* Top active border glow */}
+                            {isActive && (
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-cyan-400 shadow-[0_0_10px_rgba(13,185,242,0.5)]"></div>
+                            )}
+
+                            <tab.icon className={cn("w-5 h-5", isActive ? "animate-pulse-slow" : "")} strokeWidth={isActive ? 2.5 : 2} />
+                            <span className="text-[10px] font-space-grotesk tracking-wide uppercase">{tab.name}</span>
+                        </Link>
+                    )
+                })}
+            </div>
+        </div>
+    )
 }

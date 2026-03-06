@@ -1,20 +1,8 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // PWA headers
-  async headers() {
-    return [
-      {
-        source: '/manifest.json',
-        headers: [
-          {
-            key: 'Content-Type',
-            value: 'application/manifest+json',
-          },
-        ],
-      },
-    ]
-  },
-}
+  /* config options here */
+  reactCompiler: true,
+};
 
-export default nextConfig
+export default nextConfig;

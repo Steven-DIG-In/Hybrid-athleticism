@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Deep, luxurious dark mode background */
+    --background: 224 71% 4%; 
+    --foreground: 213 31% 91%; 
+    
+    /* Subtle elevated cards */
+    --card: 224 71% 7%;
+    --card-foreground: 213 31% 91%;
+    
+    --popover: 224 71% 7%;
+    --popover-foreground: 213 31% 91%;
+    
+    /* Vibrant glowing accents for data visualization */
+    --primary: 210 100% 60%; /* Electric cyan/blue */
+    --primary-foreground: 222.2 47.4% 1.2%;
+    
+    --secondary: 222.2 47.4% 16%;
+    --secondary-foreground: 210 40% 98%;
+    
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    
+    --accent: 216 100% 50%; /* Deep blue accent */
+    --accent-foreground: 210 40% 98%;
+    
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 216 100% 50%;
+    
+    --radius: 0.75rem;
+
+    /* Custom Metadata Accents */
+    --metallic-silver: 210 9% 80%;
+    --neon-cyan: 190 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    overscroll-behavior-y: none; /* Stops rubber-banding on premium apps */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* PWA specific safe areas */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-area-inset-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Premium scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--background)); 
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border)); 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground)); 
+}

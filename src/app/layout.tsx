@@ -1,41 +1,34 @@
-import type { Metadata, Viewport } from 'next'
-import './globals.css'
+import type { Metadata } from "next";
+import { Inter, Space_Grotesk } from "next/font/google"; // Space_Grotesk for editorial headers, Inter for legible body
+import "./globals.css";
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
-  title: 'Hybrid Athleticism',
-  description: 'Holistic training management for strength, rucking, and running',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'Hybrid Athleticism',
-  },
-}
-
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  viewportFit: 'cover',
-  themeColor: '#18181b',
-}
+  title: "Project Apex | Hybrid Athleticism",
+  description: "The most advanced training tool for traversing the extremes. Engineered for the elite.",
+};
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="mobile-web-app-capable" content="yes" />
-      </head>
-      <body className="font-sans antialiased">
+    <html lang="en" className="dark">
+      <body
+        className={`${inter.variable} ${spaceGrotesk.variable} antialiased bg-[#050505] text-white min-h-screen selection:bg-cyan-500/30 selection:text-cyan-50`}
+      >
         {children}
       </body>
     </html>
-  )
+  );
 }
