@@ -3,8 +3,9 @@ import type { WorkoutWithSets } from "@/lib/types/training.types"
 import { AlertTriangle } from "lucide-react"
 import { WorkoutLogger } from "@/components/workout/WorkoutLogger"
 
-export default async function ActiveWorkoutPage({ params }: { params: { id: string } }) {
-    const result = await getWorkoutById(params.id)
+export default async function ActiveWorkoutPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params
+    const result = await getWorkoutById(id)
 
     if (!result.success || !result.data) {
         return (
