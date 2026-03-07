@@ -156,16 +156,16 @@ const ARCHETYPE_DISTRIBUTION: Record<string, {
     conditioning: [number, number]
     mobility: [number, number]
 }> = {
-    hybrid_fitness:     { lifting: [1, 3], endurance: [1, 3], conditioning: [0, 2], mobility: [0, 2] },
-    strength_focus:     { lifting: [2, 4], endurance: [0, 2], conditioning: [0, 1], mobility: [0, 1] },
-    endurance_focus:    { lifting: [1, 2], endurance: [2, 4], conditioning: [0, 1], mobility: [0, 1] },
-    conditioning_focus: { lifting: [1, 2], endurance: [0, 2], conditioning: [1, 3], mobility: [0, 1] },
-    longevity:          { lifting: [1, 3], endurance: [1, 2], conditioning: [0, 2], mobility: [0, 2] },
+    hybrid_fitness:     { lifting: [1, 3], endurance: [1, 3], conditioning: [0, 2], mobility: [1, 2] },
+    strength_focus:     { lifting: [2, 4], endurance: [0, 2], conditioning: [0, 1], mobility: [1, 2] },
+    endurance_focus:    { lifting: [1, 2], endurance: [2, 4], conditioning: [0, 1], mobility: [1, 2] },
+    conditioning_focus: { lifting: [1, 2], endurance: [0, 2], conditioning: [1, 3], mobility: [1, 2] },
+    longevity:          { lifting: [1, 3], endurance: [1, 2], conditioning: [0, 2], mobility: [1, 2] },
     // Mesocycle goal names (fallback mapping)
-    HYBRID_PEAKING:     { lifting: [1, 3], endurance: [1, 3], conditioning: [0, 2], mobility: [0, 2] },
-    STRENGTH:           { lifting: [2, 4], endurance: [0, 2], conditioning: [0, 1], mobility: [0, 1] },
-    ENDURANCE:          { lifting: [1, 2], endurance: [2, 4], conditioning: [0, 1], mobility: [0, 1] },
-    HYPERTROPHY:        { lifting: [2, 4], endurance: [0, 2], conditioning: [0, 2], mobility: [0, 1] },
+    HYBRID_PEAKING:     { lifting: [1, 3], endurance: [1, 3], conditioning: [0, 2], mobility: [1, 2] },
+    STRENGTH:           { lifting: [2, 4], endurance: [0, 2], conditioning: [0, 1], mobility: [1, 2] },
+    ENDURANCE:          { lifting: [1, 2], endurance: [2, 4], conditioning: [0, 1], mobility: [1, 2] },
+    HYPERTROPHY:        { lifting: [2, 4], endurance: [0, 2], conditioning: [0, 2], mobility: [1, 2] },
 }
 
 /**

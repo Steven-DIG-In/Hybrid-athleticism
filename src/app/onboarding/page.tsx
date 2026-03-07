@@ -10,7 +10,9 @@ import {
     ArrowRight, ArrowLeft, Zap, Dumbbell, Mountain, Heart,
     Timer, AlertTriangle, Sparkles, ChevronRight, Check, X,
     Footprints, Bike, Waves, BarChart3, Brain, Shield, Target, Gauge,
+    Users, GripVertical, Plus, Minus, ChevronDown,
 } from "lucide-react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import {
     updateOnboardingProfile,
@@ -19,6 +21,12 @@ import {
     saveRecentTraining,
     completeOnboarding,
 } from "@/lib/actions/onboarding.actions"
+import {
+    SELECTABLE_COACHES,
+    ALWAYS_ACTIVE_COACHES,
+    getDefaultTeamForGoal,
+} from "@/lib/coaching-staff"
+import type { CoachProfile } from "@/lib/coaching-staff"
 import type {
     ExperienceLevel,
     TrainingEnvironment,
@@ -112,18 +120,18 @@ const ENDURANCE_MODALITIES = [
 type ScreenId =
     | 'welcome' | 'profile' | 'experience' | 'experience_detail'
     | 'equipment' | 'equipment_prefs' | 'availability' | 'lifestyle'
-    | 'goals' | 'methodology' | 'injuries' | 'body_comp' | 'benchmark_path' | 'generating'
+    | 'goals' | 'coaching_team' | 'methodology' | 'injuries' | 'body_comp' | 'benchmark_path' | 'generating'
 
 type BenchmarkPath = 'ai_estimated' | 'user_provided' | 'discovery'
 
 const QUICK_SCREENS: ScreenId[] = [
-    'welcome', 'profile', 'experience', 'equipment', 'availability', 'goals', 'injuries', 'benchmark_path', 'generating'
+    'welcome', 'profile', 'experience', 'equipment', 'availability', 'goals', 'coaching_team', 'injuries', 'benchmark_path', 'generating'
 ]
 
 const DEEP_SCREENS: ScreenId[] = [
     'welcome', 'profile', 'experience', 'experience_detail',
     'equipment', 'equipment_prefs', 'availability', 'lifestyle',
-    'goals', 'methodology', 'injuries', 'body_comp', 'benchmark_path', 'generating'
+    'goals', 'coaching_team', 'methodology', 'injuries', 'body_comp', 'benchmark_path', 'generating'
 ]
 
 const STRENGTH_BENCHMARKS = [
@@ -206,6 +214,10 @@ export default function OnboardingPage() {
     // Goals
     const [goalArchetype, setGoalArchetype] = useState<GoalArchetype | null>(null)
 
+    // Coaching team (coach IDs in priority order)
+    const [coachingTeam, setCoachingTeam] = useState<string[]>([])
+    const [expandedCoachId, setExpandedCoachId] = useState<string | null>(null)
+
     // Methodology (deep)
     const [strengthMeth, setStrengthMeth] = useState<MethodologyPreference>('ai_decides')
     const [hypertrophyMeth, setHypertrophyMeth] = useState<MethodologyPreference>('ai_decides')
@@ -273,6 +285,7 @@ export default function OnboardingPage() {
                 goalArchetype: goalArchetype ?? undefined,
                 hasInjuries,
                 movementsToAvoid,
+                coachingTeam: coachingTeam.map((id, i) => ({ coach: id, priority: i + 1 })),
                 // Deep path fields
                 ...(path === 'deep' ? {
                     equipmentUsageIntents,
@@ -1066,12 +1079,267 @@ export default function OnboardingPage() {
 
                         <NavButtons
                             onBack={goBack}
-                            onNext={goNext}
+                            onNext={() => {
+                                // Auto-populate coaching team from goal if team is empty
+                                if (goalArchetype && coachingTeam.length === 0) {
+                                    setCoachingTeam(getDefaultTeamForGoal(goalArchetype))
+                                }
+                                goNext()
+                            }}
                             nextDisabled={!goalArchetype}
                             nextLabel="Continue"
                         />
                     </div>
                 )
+
+            // ═══════════════════════════════════════════════════════════════════
+            // SCREEN 6a: BUILD YOUR COACHING TEAM
+            // ═══════════════════════════════════════════════════════════════════
+            case 'coaching_team': {
+                const availableToAdd = SELECTABLE_COACHES.filter(c => !coachingTeam.includes(c.id))
+
+                const addCoach = (id: string) => {
+                    setCoachingTeam(prev => [...prev, id])
+                }
+
+                const removeCoach = (id: string) => {
+                    setCoachingTeam(prev => prev.filter(c => c !== id))
+                }
+
+                const moveCoach = (fromIndex: number, toIndex: number) => {
+                    setCoachingTeam(prev => {
+                        const next = [...prev]
+                        const [moved] = next.splice(fromIndex, 1)
+                        next.splice(toIndex, 0, moved)
+                        return next
+                    })
+                }
+
+                const handleCoachDragStart = (e: React.DragEvent, index: number) => {
+                    e.dataTransfer.setData('text/plain', String(index))
+                    e.dataTransfer.effectAllowed = 'move'
+                }
+
+                const handleCoachDrop = (e: React.DragEvent, targetIndex: number) => {
+                    e.preventDefault()
+                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'))
+                    if (!isNaN(fromIndex) && fromIndex !== targetIndex) {
+                        moveCoach(fromIndex, targetIndex)
+                    }
+                }
+
+                const getCoachById = (id: string): CoachProfile | undefined =>
+                    SELECTABLE_COACHES.find(c => c.id === id) ?? ALWAYS_ACTIVE_COACHES.find(c => c.id === id)
+
+                return (
+                    <div className="space-y-6">
+                        <div>
+                            <h1 className="text-4xl font-space-grotesk font-bold mb-3">
+                                Your Coaching <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Team</span>.
+                            </h1>
+                            <p className="text-neutral-400 font-inter text-sm">
+                                These AI coaches build your program. Drag to set priority. Higher priority = more sessions and recovery budget.
+                            </p>
+                        </div>
+
+                        {/* Active coaching team — draggable */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+                                Your Team (drag to reorder priority)
+                            </label>
+                            <div className="space-y-2">
+                                {coachingTeam.map((coachId, index) => {
+                                    const coach = getCoachById(coachId)
+                                    if (!coach) return null
+                                    const isExpanded = expandedCoachId === coach.id
+                                    return (
+                                        <div
+                                            key={coach.id}
+                                            draggable
+                                            onDragStart={(e) => handleCoachDragStart(e, index)}
+                                            onDragOver={(e) => e.preventDefault()}
+                                            onDrop={(e) => handleCoachDrop(e, index)}
+                                            className="border border-cyan-500/40 bg-cyan-950/10 transition-all cursor-grab active:cursor-grabbing hover:border-cyan-400/60"
+                                        >
+                                            <div className="flex items-center gap-3 p-3">
+                                                <div className="flex items-center gap-1 text-cyan-500/50">
+                                                    <span className="text-xs font-mono font-bold w-5 text-center">{index + 1}</span>
+                                                    <GripVertical className="w-4 h-4" />
+                                                </div>
+                                                <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-cyan-500/30">
+                                                    <Image
+                                                        src={coach.imagePath}
+                                                        alt={coach.name}
+                                                        width={40}
+                                                        height={40}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setExpandedCoachId(isExpanded ? null : coach.id) }}
+                                                    className="flex-1 min-w-0 text-left cursor-pointer"
+                                                >
+                                                    <h4 className="text-sm font-space-grotesk font-bold text-cyan-400 truncate">{coach.name}</h4>
+                                                    <p className="text-[10px] text-neutral-400 font-inter truncate">{coach.tagline}</p>
+                                                </button>
+                                                <ChevronDown className={cn("w-4 h-4 text-cyan-500/40 transition-transform flex-shrink-0", isExpanded && "rotate-180")} />
+                                                <button
+                                                    onClick={() => removeCoach(coach.id)}
+                                                    className="p-1.5 text-neutral-600 hover:text-red-400 transition-colors flex-shrink-0"
+                                                >
+                                                    <Minus className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isExpanded && (
+                                                    <motion.div
+                                                        initial={{ height: 0, opacity: 0 }}
+                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                        exit={{ height: 0, opacity: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="overflow-hidden"
+                                                    >
+                                                        <div className="px-3 pb-3 pt-1 border-t border-cyan-500/20">
+                                                            <p className="text-xs text-neutral-400 font-inter leading-relaxed">{coach.bio}</p>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    )
+                                })}
+                                {coachingTeam.length === 0 && (
+                                    <p className="text-neutral-600 font-inter text-xs py-4 text-center border border-dashed border-[#222]">
+                                        No coaches selected. Add at least one below.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Available to add */}
+                        {availableToAdd.length > 0 && (
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+                                    Available Coaches
+                                </label>
+                                <div className="space-y-2">
+                                    {availableToAdd.map((coach) => {
+                                        const isExpanded = expandedCoachId === coach.id
+                                        return (
+                                            <div
+                                                key={coach.id}
+                                                className="border border-[#222] bg-[#0c0c0c] hover:border-white/20 transition-all"
+                                            >
+                                                <div className="flex items-center gap-3 p-3">
+                                                    <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-[#333] opacity-60">
+                                                        <Image
+                                                            src={coach.imagePath}
+                                                            alt={coach.name}
+                                                            width={40}
+                                                            height={40}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setExpandedCoachId(isExpanded ? null : coach.id)}
+                                                        className="flex-1 min-w-0 text-left cursor-pointer"
+                                                    >
+                                                        <h4 className="text-sm font-space-grotesk font-bold text-neutral-300 truncate">{coach.name}</h4>
+                                                        <p className="text-[10px] text-neutral-500 font-inter truncate">{coach.tagline}</p>
+                                                    </button>
+                                                    <ChevronDown className={cn("w-4 h-4 text-neutral-600 transition-transform flex-shrink-0", isExpanded && "rotate-180")} />
+                                                    <button
+                                                        onClick={() => addCoach(coach.id)}
+                                                        className="p-1.5 text-neutral-600 hover:text-cyan-400 transition-colors flex-shrink-0"
+                                                    >
+                                                        <Plus className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                                <AnimatePresence>
+                                                    {isExpanded && (
+                                                        <motion.div
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: 'auto', opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            transition={{ duration: 0.2 }}
+                                                            className="overflow-hidden"
+                                                        >
+                                                            <div className="px-3 pb-3 pt-1 border-t border-[#222]">
+                                                                <p className="text-xs text-neutral-500 font-inter leading-relaxed">{coach.bio}</p>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Always-active coaches (info only) */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+                                Always Active (every athlete)
+                            </label>
+                            <div className="space-y-2">
+                                {ALWAYS_ACTIVE_COACHES.map((coach) => {
+                                    const isExpanded = expandedCoachId === coach.id
+                                    return (
+                                        <div
+                                            key={coach.id}
+                                            className="border border-[#1a1a1a] bg-[#080808]"
+                                        >
+                                            <div className="flex items-center gap-3 p-3">
+                                                <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-[#222] opacity-50">
+                                                    <Image
+                                                        src={coach.imagePath}
+                                                        alt={coach.name}
+                                                        width={40}
+                                                        height={40}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={() => setExpandedCoachId(isExpanded ? null : coach.id)}
+                                                    className="flex-1 min-w-0 text-left cursor-pointer"
+                                                >
+                                                    <h4 className="text-sm font-space-grotesk font-bold text-neutral-500 truncate">{coach.name}</h4>
+                                                    <p className="text-[10px] text-neutral-600 font-inter truncate">{coach.tagline}</p>
+                                                </button>
+                                                <ChevronDown className={cn("w-4 h-4 text-neutral-700 transition-transform flex-shrink-0", isExpanded && "rotate-180")} />
+                                                <span className="text-[9px] font-mono uppercase tracking-wider text-emerald-600 flex-shrink-0">Always On</span>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isExpanded && (
+                                                    <motion.div
+                                                        initial={{ height: 0, opacity: 0 }}
+                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                        exit={{ height: 0, opacity: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="overflow-hidden"
+                                                    >
+                                                        <div className="px-3 pb-3 pt-1 border-t border-[#1a1a1a]">
+                                                            <p className="text-xs text-neutral-600 font-inter leading-relaxed">{coach.bio}</p>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+
+                        <NavButtons
+                            onBack={goBack}
+                            onNext={goNext}
+                            nextDisabled={coachingTeam.length === 0}
+                            nextLabel="Continue"
+                        />
+                    </div>
+                )
+            }
 
             // ═══════════════════════════════════════════════════════════════════
             // SCREEN 6b: METHODOLOGY & TRANSPARENCY (Deep only)
@@ -1511,6 +1779,7 @@ export default function OnboardingPage() {
                                         <SummaryRow label="Focus" value={goalArchetype?.replace('_', ' ') ?? 'Not set'} />
                                         <SummaryRow label="Days/week" value={`${availableDays} days, ${sessionDuration} min`} />
                                         <SummaryRow label="Equipment" value={`${equipmentList.length} items`} />
+                                        <SummaryRow label="Coaches" value={`${coachingTeam.length} selected`} />
                                         <SummaryRow label="Injuries" value={hasInjuries ? `${injuries.length} flagged` : 'None'} />
                                     </div>
                                 </div>

@@ -106,9 +106,22 @@ export async function getWorkoutById(workoutId: string): Promise<ActionResult<Wo
 /**
  * Mark a workout as complete and record the actual duration.
  */
+export interface ConditioningResultInput {
+    workoutFormat: string
+    isRx: boolean
+    resultTimeSeconds?: number
+    resultRounds?: number
+    resultPartialReps?: number
+    resultCompleted?: boolean
+    perceivedEffortRpe?: number
+    modifications?: string
+    athleteNotes?: string
+}
+
 export async function completeWorkout(
     workoutId: string,
-    actualDurationMinutes: number
+    actualDurationMinutes: number,
+    conditioningResult?: ConditioningResultInput
 ): Promise<ActionResult<Workout>> {
     const supabase = await createClient()
 
@@ -131,6 +144,31 @@ export async function completeWorkout(
 
     if (error) {
         return { success: false, error: error.message }
+    }
+
+    // Persist conditioning result if provided
+    if (conditioningResult) {
+        const { error: condError } = await supabase
+            .from('conditioning_logs')
+            .insert({
+                workout_id: workoutId,
+                user_id: user.id,
+                workout_format: conditioningResult.workoutFormat,
+                is_rx: conditioningResult.isRx,
+                result_time_seconds: conditioningResult.resultTimeSeconds ?? null,
+                result_rounds: conditioningResult.resultRounds ?? null,
+                result_partial_reps: conditioningResult.resultPartialReps ?? null,
+                result_completed: conditioningResult.resultCompleted ?? null,
+                perceived_effort_rpe: conditioningResult.perceivedEffortRpe ?? null,
+                modifications: conditioningResult.modifications ?? null,
+                athlete_notes: conditioningResult.athleteNotes ?? null,
+                logged_at: new Date().toISOString(),
+            })
+
+        if (condError) {
+            console.error('[completeWorkout] conditioning log error:', condError)
+            // Don't fail the whole completion — workout is already marked done
+        }
     }
 
     revalidatePath('/dashboard')

@@ -95,3 +95,28 @@ export const EQUIPMENT_CONSTRAINT = `EQUIPMENT CONSTRAINT:
 - If the athlete has "barbell_rack" but not "cable_machine", substitute cable movements with bands or free weights.
 - Equipment usage intent matters: if the athlete uses the rower for endurance (not conditioning), do not program it for intervals.
 - Always respect the athlete's primary training environment (commercial gym vs home gym vs outdoor-minimal).`
+
+// ─── Shared Definitions (used by ALL coaches) ──────────────────────────────
+
+export const SHARED_DEFINITIONS = `SHARED TERMINOLOGY:
+- RIR: Reps In Reserve (how many more reps the athlete could have done). 0 = failure, 1 = one more rep possible, 3 = conservative effort.
+- RPE: Rate of Perceived Exertion (1-10 scale). 10 = max effort, 7 = moderate, 5 = easy.
+- MEV: Minimum Effective Volume — lowest sets/week that produces adaptation.
+- MAV: Maximum Adaptive Volume — the sweet spot for most growth.
+- MRV: Maximum Recoverable Volume — upper limit before regression.
+- Load Budget: 1-10 scale of session systemic cost. 1 = light mobility, 3 = easy cardio, 5 = moderate lifting, 7 = heavy compounds, 9 = max effort testing, 10 = competition.
+- Spinal Load: Combined axial loading from squats, deadlifts, rucking, rowing. These all draw from the same recovery pool.
+- CNS Demand: Central nervous system fatigue from heavy loads (>85% 1RM), max sprints, and explosive work.
+
+MUSCLE GROUP NAMES (use these exactly for consistency across all coaches):
+Quads, Hamstrings, Glutes, Chest, Back, Shoulders, Biceps, Triceps, Core, Calves, Forearms, Traps, Rear Delts
+
+TRAINING DOMAINS:
+- STRENGTH: Force production, maximal strength, heavy compounds (1-5 reps)
+- HYPERTROPHY: Muscle growth, volume work, metabolic stress (8-15 reps)
+- ENDURANCE: Structured distance/duration — running, rucking, rowing, swimming, cycling
+- CONDITIONING: MetCons, HIIT, circuits, work capacity, energy system development
+- MOBILITY: Movement quality, flexibility, active recovery, session primers
+
+PROGRAM CONTINUITY RULE:
+Programs have continuity across weeks within a mesocycle. Movements are consistent — intensity, volume, and load progress week to week. Weekly adjustments are MODIFICATIONS to existing sessions (change intensity, reduce sets, adjust weight), NOT complete rewrites. The same exercises should appear across weeks unless there is a specific reason to swap (injury, equipment change, deload variation).`

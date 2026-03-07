@@ -57,6 +57,12 @@ RIR ADJUSTMENT RULES:
 - If overshooting, suggest negative adjustment
 - null if no change needed
 
+PERFORMANCE DIVERGENCE RULES:
+- If actual weights are consistently 20%+ below targets, investigate: the athlete may be returning from injury, time off, or the AI estimates were inaccurate
+- Include a note in rationale acknowledging the divergence and whether estimates should be recalibrated
+- If tonnage dropped significantly from the previous week, flag potential overtraining, illness, or life stress
+- When estimates appear wrong (first 2 weeks of a mesocycle), recommend maintaining current actual weights as the new baseline rather than chasing the original targets
+
 ${JSON_RESPONSE_RULES}`
 }
 

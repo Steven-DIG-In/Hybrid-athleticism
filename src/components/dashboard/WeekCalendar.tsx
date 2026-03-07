@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     Dumbbell, Footprints, Mountain, Timer, Waves,
@@ -381,12 +381,19 @@ export function WeekCalendar({
     onDragEndSession,
     draggingSessionId,
 }: WeekCalendarProps) {
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = toLocalDateStr(new Date())
 
     // Derive current month from week start
     const weekStartObj = new Date(weekStartDate + 'T00:00:00')
     const [viewYear, setViewYear] = useState(weekStartObj.getFullYear())
     const [viewMonth, setViewMonth] = useState(weekStartObj.getMonth())
+
+    // Sync calendar view when the viewed week changes (e.g. week 1 → week 2)
+    useEffect(() => {
+        const obj = new Date(weekStartDate + 'T00:00:00')
+        setViewYear(obj.getFullYear())
+        setViewMonth(obj.getMonth())
+    }, [weekStartDate])
 
     // Build calendar grid
     const calendarDays = useMemo(() => getMonthDays(viewYear, viewMonth), [viewYear, viewMonth])
@@ -419,7 +426,7 @@ export function WeekCalendar({
         const start = new Date(weekStartDate + 'T00:00:00')
         const end = new Date(weekEndDate + 'T00:00:00')
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            set.add(d.toISOString().split('T')[0])
+            set.add(toLocalDateStr(d))
         }
         return set
     }, [weekStartDate, weekEndDate])

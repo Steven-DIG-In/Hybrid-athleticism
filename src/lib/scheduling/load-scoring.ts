@@ -246,7 +246,10 @@ export function computeWeekLoad(
     const end = new Date(weekEndDate + 'T00:00:00')
 
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0]
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        const dateStr = `${y}-${m}-${dd}`
         const dayIndex = (d.getDay() + 6) % 7 // Convert Sun=0 to Mon=0 indexing
         days.push({
             date: dateStr,

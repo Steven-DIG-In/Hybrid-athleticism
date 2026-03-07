@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import type { ActionResult } from '@/lib/types/training.types'
-import type { ExerciseSet, CardioLog, RuckingLog } from '@/lib/types/database.types'
+import type { ExerciseSet, CardioLog, RuckingLog, ConditioningLog } from '@/lib/types/database.types'
 import { revalidatePath } from 'next/cache'
 import { calculateRPVolumeLandmarks, calculateWeeklyVolumeTarget } from '@/lib/training/methodology-helpers'
 
@@ -168,6 +168,45 @@ export async function updateExerciseSet(
     return { success: true, data: updatedSet }
 }
 
+// ─── Update Exercise Set Targets ─────────────────────────────────────────────
+
+/**
+ * Update the target values on a pre-scaffolded exercise set.
+ * Used when the athlete adjusts AI estimates before starting a workout.
+ */
+export async function updateExerciseSetTargets(
+    setId: string,
+    targets: { targetWeightKg?: number; targetReps?: number; targetRir?: number }
+): Promise<ActionResult<ExerciseSet>> {
+    const supabase = await createClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return { success: false, error: 'Not authenticated' }
+    }
+
+    const updatePayload: Record<string, unknown> = {}
+    if (targets.targetWeightKg !== undefined) updatePayload.target_weight_kg = targets.targetWeightKg
+    if (targets.targetReps !== undefined) updatePayload.target_reps = targets.targetReps
+    if (targets.targetRir !== undefined) updatePayload.target_rir = targets.targetRir
+
+    const { data: updatedSet, error } = await supabase
+        .from('exercise_sets')
+        .update(updatePayload)
+        .eq('id', setId)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+    if (error) {
+        console.error('[updateExerciseSetTargets]', error)
+        return { success: false, error: error.message }
+    }
+
+    revalidatePath('/workout')
+    return { success: true, data: updatedSet }
+}
+
 // ─── Cardio Session Logging ───────────────────────────────────────────────────
 
 export interface LogCardioSessionInput {
@@ -290,6 +329,64 @@ export async function logRuckingSession(
     return { success: true, data: ruckingLog }
 }
 
+// ─── Conditioning Session Logging ─────────────────────────────────────────────
+
+export interface LogConditioningSessionInput {
+    workoutId: string
+    workoutFormat: string
+    isRx: boolean
+    resultTimeSeconds?: number
+    resultRounds?: number
+    resultPartialReps?: number
+    resultCompleted?: boolean
+    perceivedEffortRpe?: number
+    modifications?: string
+    athleteNotes?: string
+}
+
+/**
+ * Log a completed conditioning/metcon session.
+ * Captures format-specific results (time, rounds, completion), Rx/Scaled status,
+ * RPE, modifications, and athlete notes for the Recovery Coach weekly review.
+ */
+export async function logConditioningSession(
+    input: LogConditioningSessionInput
+): Promise<ActionResult<ConditioningLog>> {
+    const supabase = await createClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return { success: false, error: 'Not authenticated' }
+    }
+
+    const { data: conditioningLog, error } = await supabase
+        .from('conditioning_logs')
+        .insert({
+            workout_id: input.workoutId,
+            user_id: user.id,
+            workout_format: input.workoutFormat,
+            is_rx: input.isRx,
+            result_time_seconds: input.resultTimeSeconds ?? null,
+            result_rounds: input.resultRounds ?? null,
+            result_partial_reps: input.resultPartialReps ?? null,
+            result_completed: input.resultCompleted ?? null,
+            perceived_effort_rpe: input.perceivedEffortRpe ?? null,
+            modifications: input.modifications ?? null,
+            athlete_notes: input.athleteNotes ?? null,
+            logged_at: new Date().toISOString(),
+        })
+        .select()
+        .single()
+
+    if (error) {
+        console.error('[logConditioningSession]', error)
+        return { success: false, error: error.message }
+    }
+
+    revalidatePath('/workout')
+    return { success: true, data: conditioningLog }
+}
+
 // ─── Weekly Volume Summary (for AI Coach input) ───────────────────────────────
 
 /**
@@ -334,6 +431,12 @@ export async function buildWeeklyPayload(microcycleId: string) {
     const { data: ruckingLogs } = await supabase
         .from('rucking_logs')
         .select('distance_km, total_load_index, fatigue_flag')
+        .in('workout_id', workoutIds)
+
+    // Conditioning summary
+    const { data: conditioningLogs } = await supabase
+        .from('conditioning_logs')
+        .select('workout_format, is_rx, perceived_effort_rpe, result_time_seconds, result_rounds, result_completed, modifications')
         .in('workout_id', workoutIds)
 
     // Aggregate muscle group volumes
@@ -391,6 +494,17 @@ export async function buildWeeklyPayload(microcycleId: string) {
             totalRuckDistanceKm: ruckingLogs?.reduce((sum, r) => sum + r.distance_km, 0) ?? 0,
             totalRuckLoadIndex: ruckingLogs?.reduce((sum, r) => sum + (r.total_load_index ?? 0), 0) ?? 0,
             hadHighFatigueRuck: ruckingLogs?.some((r) => r.fatigue_flag) ?? false,
+            conditioningSessionCount: conditioningLogs?.length ?? 0,
+            conditioningAvgRpe: conditioningLogs && conditioningLogs.length > 0
+                ? conditioningLogs
+                    .filter(c => c.perceived_effort_rpe != null)
+                    .reduce((sum, c) => sum + (c.perceived_effort_rpe ?? 0), 0) /
+                    Math.max(conditioningLogs.filter(c => c.perceived_effort_rpe != null).length, 1)
+                : null,
+            conditioningRxRate: conditioningLogs && conditioningLogs.length > 0
+                ? conditioningLogs.filter(c => c.is_rx).length / conditioningLogs.length
+                : null,
+            hadHighRpeConditioning: conditioningLogs?.some(c => (c.perceived_effort_rpe ?? 0) >= 9) ?? false,
         },
     }
 }

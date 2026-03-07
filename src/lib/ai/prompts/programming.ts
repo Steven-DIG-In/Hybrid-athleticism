@@ -180,7 +180,7 @@ SESSION POOL DESIGN RULES:
    - Don't program max-effort conditioning the day before heavy lifting
 
 10. MOBILITY PROGRAMMING:
-    - Generate standalone mobility sessions for recovery days
+    - ALWAYS generate at least 1 standalone mobility session per week (recovery / active rest)
     - Add mobilityPrimer to lifting sessions when relevant (desk job athlete squatting gets hip/ankle mobility)
     - Focus areas driven by: injuries, lifestyle (desk job → hips/thoracic), recent training load
 
@@ -201,7 +201,19 @@ SESSION POOL DESIGN RULES:
     - Conditioning: Light/moderate only, no max-effort pieces
     - Add extra mobility work
 
-13. CROSS-DOMAIN INTERFERENCE:
+13. WARM-UP & ACTIVATION:
+    - For compound lifts (squat, bench, deadlift, OHP), include the first set as a warm-up: ~50% working weight, same reps, RIR 4+
+    - Use the exercise notes field to indicate warm-up protocol (e.g., "Warm-up set — ramp to working weight")
+    - Add mobilityPrimer to every lifting session with relevant prep work (e.g., "5 min: band pull-aparts, hip circles, ankle mobility")
+    - For endurance sessions, note easy warm-up in coachNotes (e.g., "Start with 5 min easy pace before tempo work")
+
+14. GYMNASTICS & SKILL WORK:
+    - If the athlete has "pull_up_bar" or "rings" equipment and conditioning/hybrid goals, include gymnastics skill work
+    - Gymnastic movements (muscle-ups, handstand holds, L-sits, strict pull-up progressions) can be woven into LIFTING or METCON sessions
+    - Program skill work at the START of sessions when fresh (before fatiguing work)
+    - Note skill progressions in exercise notes (e.g., "If can't do strict muscle-ups, use band-assisted or 3 negatives")
+
+15. CROSS-DOMAIN INTERFERENCE:
     - Don't place heavy squat sessions and long runs in the same pool position without warning
     - Flag in fatigueNotes when two sessions will compete for the same recovery system
     - If athlete has high stress_level or physical_labor work_type, reduce total volume by 10-15%

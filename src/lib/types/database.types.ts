@@ -134,6 +134,9 @@ export interface Profile {
     has_injuries: boolean
     movements_to_avoid: string[]
 
+    // Multi-agent coaching team (Phase 1)
+    coaching_team: Array<{ coach: string; priority: number }>
+
     created_at: string
     updated_at: string
 }
@@ -203,6 +206,15 @@ export interface Mesocycle {
     is_complete: boolean
     completed_at: string | null
     ai_context_json: Record<string, unknown> | null
+
+    // Multi-agent coaching
+    mesocycle_strategy: Record<string, unknown> | null
+    strength_program: Record<string, unknown> | null
+    endurance_program: Record<string, unknown> | null
+    hypertrophy_program: Record<string, unknown> | null
+    conditioning_program: Record<string, unknown> | null
+    mobility_program: Record<string, unknown> | null
+
     created_at: string
     updated_at: string
 }
@@ -219,6 +231,12 @@ export interface Microcycle {
     is_deload: boolean
     reviewed_at: string | null
     review_summary: string | null
+
+    // Multi-agent coaching (Phase 1)
+    recovery_status: 'GREEN' | 'YELLOW' | 'RED' | null
+    recovery_assessment: Record<string, unknown> | null
+    adjustment_directive: Record<string, unknown> | null
+
     created_at: string
     updated_at: string
 }
@@ -300,6 +318,26 @@ export interface RuckingLog {
     created_at: string
 }
 
+// ─── conditioning_logs ───────────────────────────────────────────────────────
+export type ConditioningFormat = 'amrap' | 'emom' | 'for_time' | 'intervals' | 'circuit' | 'chipper' | 'metcon'
+
+export interface ConditioningLog {
+    id: string
+    workout_id: string
+    user_id: string
+    workout_format: ConditioningFormat
+    is_rx: boolean
+    result_time_seconds: number | null
+    result_rounds: number | null
+    result_partial_reps: number | null
+    result_completed: boolean | null
+    perceived_effort_rpe: number | null
+    modifications: string | null
+    athlete_notes: string | null
+    logged_at: string
+    created_at: string
+}
+
 // ─── ai_coach_interventions ───────────────────────────────────────────────────
 export interface AICoachIntervention {
     id: string
@@ -357,6 +395,11 @@ export interface Database {
                 Row: RuckingLog
                 Insert: Omit<RuckingLog, 'id' | 'total_load_index' | 'created_at'>
                 Update: Partial<Omit<RuckingLog, 'id' | 'total_load_index' | 'created_at'>>
+            }
+            conditioning_logs: {
+                Row: ConditioningLog
+                Insert: Omit<ConditioningLog, 'id' | 'created_at'>
+                Update: Partial<Omit<ConditioningLog, 'id' | 'created_at'>>
             }
             ai_coach_interventions: {
                 Row: AICoachIntervention

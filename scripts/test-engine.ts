@@ -122,6 +122,11 @@ const mockProfile: Profile = {
     benchmark_discovery_status: 'complete',
     has_injuries: true,
     movements_to_avoid: ['behind the neck press'],
+    coaching_team: [
+        { coach: 'strength', priority: 1 },
+        { coach: 'endurance', priority: 2 },
+        { coach: 'conditioning', priority: 3 },
+    ],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
 }

@@ -83,6 +83,9 @@ export interface UpdateOnboardingProfileInput {
     hasInjuries?: boolean
     movementsToAvoid?: string[]
 
+    // Coaching team
+    coachingTeam?: Array<{ coach: string; priority: number }>
+
     // Legacy — still needed for mesocycle creation
     displayName?: string
 }
@@ -179,6 +182,9 @@ export async function updateOnboardingProfile(
     // Injuries
     if (input.hasInjuries !== undefined) updateData.has_injuries = input.hasInjuries
     if (input.movementsToAvoid !== undefined) updateData.movements_to_avoid = input.movementsToAvoid
+
+    // Coaching team
+    if (input.coachingTeam !== undefined) updateData.coaching_team = input.coachingTeam
 
     if (Object.keys(updateData).length === 0) {
         return { success: false, error: 'No fields to update' }

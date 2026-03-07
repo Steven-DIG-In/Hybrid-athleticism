@@ -24,9 +24,9 @@ interface DayBarData {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const GRAPH_HEIGHT = 130
-const CENTER_Y = GRAPH_HEIGHT / 2
-const HALF_HEIGHT = CENTER_Y - 4 // leave padding at extremes
 const BAR_RX = 3
+const BAR_PADDING = 4 // padding from top/bottom edges
+const MAX_BAR_HEIGHT = (GRAPH_HEIGHT / 2) - BAR_PADDING // max each bar can grow
 
 const CARDIO_MODALITIES = new Set(['CARDIO', 'METCON', 'RUCKING'])
 
@@ -40,14 +40,23 @@ function toLocalDateStr(d: Date): string {
 // ─── Single Day Column ──────────────────────────────────────────────────────
 
 function DayColumn({ day, maxLoad }: { day: DayBarData; maxLoad: number }) {
-    const strengthH = day.strengthLoad > 0
-        ? Math.max((day.strengthLoad / maxLoad) * HALF_HEIGHT, 4)
-        : 0
+    // Cardio grows DOWN from top, Strength grows UP from bottom
     const cardioH = day.cardioLoad > 0
-        ? Math.max((day.cardioLoad / maxLoad) * HALF_HEIGHT, 4)
+        ? Math.max((day.cardioLoad / maxLoad) * MAX_BAR_HEIGHT, 4)
+        : 0
+    const strengthH = day.strengthLoad > 0
+        ? Math.max((day.strengthLoad / maxLoad) * MAX_BAR_HEIGHT, 4)
         : 0
 
     const isInterference = day.strengthLoad > 0 && day.cardioLoad > 0 && day.totalLoad > 6
+
+    // Cardio: top edge at BAR_PADDING, bar grows downward
+    const cardioY = BAR_PADDING
+    // Strength: bottom edge at GRAPH_HEIGHT - BAR_PADDING, bar grows upward
+    const strengthY = GRAPH_HEIGHT - BAR_PADDING - strengthH
+
+    // Gap between bar bottoms — negative means overlap
+    const gap = strengthY - (cardioY + cardioH)
 
     return (
         <div className="relative flex items-center justify-center" style={{ height: GRAPH_HEIGHT }}>
@@ -67,42 +76,19 @@ function DayColumn({ day, maxLoad }: { day: DayBarData; maxLoad: number }) {
                     </linearGradient>
                 </defs>
 
-                {/* Center axis segment */}
-                <line
-                    x1={10} y1={CENTER_Y} x2={90} y2={CENTER_Y}
-                    stroke="#2a2a2a" strokeWidth={1}
-                />
-
                 {/* 50% grid marks */}
                 <line
-                    x1={20} y1={CENTER_Y - HALF_HEIGHT / 2}
-                    x2={80} y2={CENTER_Y - HALF_HEIGHT / 2}
+                    x1={20} y1={BAR_PADDING + MAX_BAR_HEIGHT / 2}
+                    x2={80} y2={BAR_PADDING + MAX_BAR_HEIGHT / 2}
                     stroke="#151515" strokeWidth={0.5} strokeDasharray="2,3"
                 />
                 <line
-                    x1={20} y1={CENTER_Y + HALF_HEIGHT / 2}
-                    x2={80} y2={CENTER_Y + HALF_HEIGHT / 2}
+                    x1={20} y1={GRAPH_HEIGHT - BAR_PADDING - MAX_BAR_HEIGHT / 2}
+                    x2={80} y2={GRAPH_HEIGHT - BAR_PADDING - MAX_BAR_HEIGHT / 2}
                     stroke="#151515" strokeWidth={0.5} strokeDasharray="2,3"
                 />
 
-                {/* Strength bar — grows UP from center */}
-                {strengthH > 0 && (
-                    <motion.rect
-                        x={20}
-                        width={60}
-                        rx={BAR_RX}
-                        ry={BAR_RX}
-                        fill="url(#strengthGrad)"
-                        initial={false}
-                        animate={{
-                            y: CENTER_Y - strengthH,
-                            height: strengthH,
-                        }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                    />
-                )}
-
-                {/* Cardio/conditioning bar — grows DOWN from center */}
+                {/* Cardio/conditioning bar — grows DOWN from top */}
                 {cardioH > 0 && (
                     <motion.rect
                         x={20}
@@ -112,25 +98,44 @@ function DayColumn({ day, maxLoad }: { day: DayBarData; maxLoad: number }) {
                         fill="url(#cardioGrad)"
                         initial={false}
                         animate={{
-                            y: CENTER_Y,
+                            y: cardioY,
                             height: cardioH,
                         }}
                         transition={{ type: 'spring', stiffness: 300, damping: 25 }}
                     />
                 )}
 
-                {/* Interference glow — pulsing at center when both domains are heavy */}
+                {/* Strength bar — grows UP from bottom */}
+                {strengthH > 0 && (
+                    <motion.rect
+                        x={20}
+                        width={60}
+                        rx={BAR_RX}
+                        ry={BAR_RX}
+                        fill="url(#strengthGrad)"
+                        initial={false}
+                        animate={{
+                            y: strengthY,
+                            height: strengthH,
+                        }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                    />
+                )}
+
+                {/* Interference glow — pulsing where bars converge */}
                 {isInterference && (
                     <motion.rect
                         x={15}
                         width={70}
-                        height={6}
+                        height={gap > 0 ? Math.min(gap, 8) : 6}
                         rx={3}
                         ry={3}
                         fill="white"
                         animate={{
-                            y: CENTER_Y - 3,
-                            opacity: [0.08, 0.2, 0.08],
+                            y: gap > 0
+                                ? cardioY + cardioH + gap / 2 - 3  // glow in the gap
+                                : strengthY - 3,                     // glow at collision point
+                            opacity: [0.08, 0.25, 0.08],
                         }}
                         transition={{
                             opacity: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' },
@@ -139,23 +144,10 @@ function DayColumn({ day, maxLoad }: { day: DayBarData; maxLoad: number }) {
                 )}
 
                 {/* Load value labels */}
-                {strengthH > 0 && (
-                    <text
-                        x={50}
-                        y={CENTER_Y - strengthH - 3}
-                        textAnchor="middle"
-                        className="fill-cyan-400"
-                        fontSize={9}
-                        fontFamily="monospace"
-                        opacity={0.7}
-                    >
-                        {day.strengthLoad}
-                    </text>
-                )}
                 {cardioH > 0 && (
                     <text
                         x={50}
-                        y={CENTER_Y + cardioH + 10}
+                        y={cardioY + cardioH + 11}
                         textAnchor="middle"
                         className="fill-emerald-400"
                         fontSize={9}
@@ -163,6 +155,19 @@ function DayColumn({ day, maxLoad }: { day: DayBarData; maxLoad: number }) {
                         opacity={0.7}
                     >
                         {day.cardioLoad}
+                    </text>
+                )}
+                {strengthH > 0 && (
+                    <text
+                        x={50}
+                        y={strengthY - 3}
+                        textAnchor="middle"
+                        className="fill-cyan-400"
+                        fontSize={9}
+                        fontFamily="monospace"
+                        opacity={0.7}
+                    >
+                        {day.strengthLoad}
                     </text>
                 )}
             </svg>
@@ -257,10 +262,10 @@ export function LoadInterferenceGraph({
         <div className="mb-2">
             {/* Graph area */}
             <div className="relative">
-                {/* Full-width center axis line */}
+                {/* Midline — where bars converge on heavy days */}
                 <div
-                    className="absolute left-0 right-0 bg-[#2a2a2a] z-0"
-                    style={{ top: CENTER_Y, height: 1 }}
+                    className="absolute left-0 right-0 bg-[#1a1a1a] z-0"
+                    style={{ top: GRAPH_HEIGHT / 2, height: 1 }}
                 />
 
                 {/* 7-column bar grid — matches calendar grid */}
@@ -274,15 +279,15 @@ export function LoadInterferenceGraph({
             {/* Minimal legend */}
             <div className="flex items-center justify-center gap-5 mt-1.5">
                 <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-sm bg-cyan-400/80" />
-                    <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest">
-                        Strength
-                    </span>
-                </div>
-                <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-sm bg-emerald-400/80" />
                     <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest">
                         Cardio & Conditioning
+                    </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-sm bg-cyan-400/80" />
+                    <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest">
+                        Strength
                     </span>
                 </div>
             </div>

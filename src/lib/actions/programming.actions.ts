@@ -6,7 +6,7 @@ import type { ActionResult, WorkoutWithSets } from '@/lib/types/training.types'
 import type { AthleteBenchmark, Microcycle, Workout } from '@/lib/types/database.types'
 import { generateStructuredResponse } from '@/lib/ai/client'
 import { WeeklySessionPoolSchema, SingleSessionResponseSchema, createValidatedSessionPoolSchema, MesocycleOverviewPlanSchema } from '@/lib/ai/schemas/programming'
-import type { WeeklySessionPool, Session, LiftingSession, EnduranceSession, ConditioningSession, SingleSessionResponse, MesocycleOverviewPlan } from '@/lib/ai/schemas/programming'
+import type { WeeklySessionPool, Session, LiftingSession, EnduranceSession, ConditioningSession, MobilitySession, SingleSessionResponse, MesocycleOverviewPlan } from '@/lib/ai/schemas/programming'
 import { buildProgrammingSystemPrompt, buildProgrammingUserPrompt, buildSingleSessionSystemPrompt, buildSingleSessionUserPrompt } from '@/lib/ai/prompts/programming'
 import type { ProgrammingContext, PreviousWeekSession, SingleSessionContext, ExistingPoolSession, MethodologyContext } from '@/lib/ai/prompts/programming'
 import { autoAssignSessionDates, buildTempWorkoutFromSession, findOptimalDayForSession } from '@/lib/scheduling/auto-assign'
@@ -681,11 +681,13 @@ export async function generateNextWeekPool(): Promise<
 // ─── Regenerate Current Week ────────────────────────────────────────────────
 
 /**
- * Regenerate the session pool for the current week.
+ * Regenerate the session pool for the current (or specified) week.
  * Deletes existing workouts and creates new ones.
  * Used when athlete updates their preferences or wants a fresh pool.
+ *
+ * @param targetMicrocycleId — Optional: regenerate this specific week (used when viewing a non-current week)
  */
-export async function regenerateCurrentWeekPool(): Promise<
+export async function regenerateCurrentWeekPool(targetMicrocycleId?: string): Promise<
     ActionResult<{ workouts: Workout[]; sessionPool: WeeklySessionPool }>
 > {
     const supabase = await createClient()
@@ -695,10 +697,14 @@ export async function regenerateCurrentWeekPool(): Promise<
         return { success: false, error: 'Not authenticated' }
     }
 
+    if (targetMicrocycleId) {
+        return generateSessionPool(targetMicrocycleId)
+    }
+
     const today = new Date().toISOString().split('T')[0]
 
     // Find the current microcycle (today's date falls within its range)
-    const { data: microcycle, error } = await supabase
+    let { data: microcycle } = await supabase
         .from('microcycles')
         .select('id')
         .eq('user_id', user.id)
@@ -706,7 +712,21 @@ export async function regenerateCurrentWeekPool(): Promise<
         .gte('end_date', today)
         .maybeSingle()
 
-    if (error || !microcycle) {
+    // If today is before the first week starts (e.g. onboarded mid-week),
+    // fall back to the nearest upcoming microcycle
+    if (!microcycle) {
+        const { data: upcoming } = await supabase
+            .from('microcycles')
+            .select('id')
+            .eq('user_id', user.id)
+            .gte('start_date', today)
+            .order('start_date', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+        microcycle = upcoming
+    }
+
+    if (!microcycle) {
         return { success: false, error: 'No current training week found' }
     }
 
@@ -718,8 +738,10 @@ export async function regenerateCurrentWeekPool(): Promise<
 /**
  * Auto-assign unallocated sessions to calendar days using load-aware scheduling.
  * Called when user clicks "Allocate Sessions" button in the dashboard.
+ *
+ * @param targetMicrocycleId — Optional: allocate this specific week (used when viewing a non-current week)
  */
-export async function allocateSessionDates(): Promise<ActionResult<void>> {
+export async function allocateSessionDates(targetMicrocycleId?: string): Promise<ActionResult<void>> {
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -727,59 +749,68 @@ export async function allocateSessionDates(): Promise<ActionResult<void>> {
         return { success: false, error: 'Not authenticated' }
     }
 
-    const today = new Date().toISOString().split('T')[0]
-
-    // Find the current microcycle
-    const { data: currentMeso } = await supabase
-        .from('mesocycles')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle()
-
-    if (!currentMeso) {
-        return { success: false, error: 'No active mesocycle found' }
-    }
-
-    // Find microcycle containing today, or the nearest upcoming one
     let microcycle: { id: string; start_date: string; end_date: string } | null = null
 
-    const { data: exactWeek } = await supabase
-        .from('microcycles')
-        .select('id, start_date, end_date')
-        .eq('mesocycle_id', currentMeso.id)
-        .eq('user_id', user.id)
-        .lte('start_date', today)
-        .gte('end_date', today)
-        .maybeSingle()
-
-    if (exactWeek) {
-        microcycle = exactWeek
+    if (targetMicrocycleId) {
+        // Use the explicitly provided microcycle
+        const { data: target } = await supabase
+            .from('microcycles')
+            .select('id, start_date, end_date')
+            .eq('id', targetMicrocycleId)
+            .eq('user_id', user.id)
+            .maybeSingle()
+        microcycle = target
     } else {
-        const { data: nextWeek } = await supabase
+        // Fall back to date-based lookup
+        const today = new Date().toISOString().split('T')[0]
+
+        const { data: currentMeso } = await supabase
+            .from('mesocycles')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .maybeSingle()
+
+        if (!currentMeso) {
+            return { success: false, error: 'No active mesocycle found' }
+        }
+
+        const { data: exactWeek } = await supabase
             .from('microcycles')
             .select('id, start_date, end_date')
             .eq('mesocycle_id', currentMeso.id)
             .eq('user_id', user.id)
-            .gte('start_date', today)
-            .order('start_date', { ascending: true })
-            .limit(1)
+            .lte('start_date', today)
+            .gte('end_date', today)
             .maybeSingle()
 
-        if (nextWeek) {
-            microcycle = nextWeek
+        if (exactWeek) {
+            microcycle = exactWeek
         } else {
-            // Fall back to latest microcycle
-            const { data: lastWeek } = await supabase
+            const { data: nextWeek } = await supabase
                 .from('microcycles')
                 .select('id, start_date, end_date')
                 .eq('mesocycle_id', currentMeso.id)
                 .eq('user_id', user.id)
-                .order('start_date', { ascending: false })
+                .gte('start_date', today)
+                .order('start_date', { ascending: true })
                 .limit(1)
                 .maybeSingle()
 
-            microcycle = lastWeek
+            if (nextWeek) {
+                microcycle = nextWeek
+            } else {
+                const { data: lastWeek } = await supabase
+                    .from('microcycles')
+                    .select('id, start_date, end_date')
+                    .eq('mesocycle_id', currentMeso.id)
+                    .eq('user_id', user.id)
+                    .order('start_date', { ascending: false })
+                    .limit(1)
+                    .maybeSingle()
+
+                microcycle = lastWeek
+            }
         }
     }
 
@@ -847,8 +878,10 @@ export async function allocateSessionDates(): Promise<ActionResult<void>> {
 /**
  * Reset all non-completed workouts in the current microcycle back to unallocated.
  * Called when user clicks "Clear Calendar" button.
+ *
+ * @param targetMicrocycleId — Optional: deallocate this specific week (used when viewing a non-current week)
  */
-export async function deallocateAllSessions(): Promise<ActionResult<void>> {
+export async function deallocateAllSessions(targetMicrocycleId?: string): Promise<ActionResult<void>> {
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -856,58 +889,66 @@ export async function deallocateAllSessions(): Promise<ActionResult<void>> {
         return { success: false, error: 'Not authenticated' }
     }
 
-    const today = new Date().toISOString().split('T')[0]
-
-    // Find the current microcycle
-    const { data: currentMeso } = await supabase
-        .from('mesocycles')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle()
-
-    if (!currentMeso) {
-        return { success: false, error: 'No active mesocycle found' }
-    }
-
-    // Find microcycle
     let microcycle: { id: string; start_date: string } | null = null
 
-    const { data: exactWeek } = await supabase
-        .from('microcycles')
-        .select('id, start_date')
-        .eq('mesocycle_id', currentMeso.id)
-        .eq('user_id', user.id)
-        .lte('start_date', today)
-        .gte('end_date', today)
-        .maybeSingle()
-
-    if (exactWeek) {
-        microcycle = exactWeek
+    if (targetMicrocycleId) {
+        const { data: target } = await supabase
+            .from('microcycles')
+            .select('id, start_date')
+            .eq('id', targetMicrocycleId)
+            .eq('user_id', user.id)
+            .maybeSingle()
+        microcycle = target
     } else {
-        const { data: nextWeek } = await supabase
+        const today = new Date().toISOString().split('T')[0]
+
+        const { data: currentMeso } = await supabase
+            .from('mesocycles')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .maybeSingle()
+
+        if (!currentMeso) {
+            return { success: false, error: 'No active mesocycle found' }
+        }
+
+        const { data: exactWeek } = await supabase
             .from('microcycles')
             .select('id, start_date')
             .eq('mesocycle_id', currentMeso.id)
             .eq('user_id', user.id)
-            .gte('start_date', today)
-            .order('start_date', { ascending: true })
-            .limit(1)
+            .lte('start_date', today)
+            .gte('end_date', today)
             .maybeSingle()
 
-        if (nextWeek) {
-            microcycle = nextWeek
+        if (exactWeek) {
+            microcycle = exactWeek
         } else {
-            const { data: lastWeek } = await supabase
+            const { data: nextWeek } = await supabase
                 .from('microcycles')
                 .select('id, start_date')
                 .eq('mesocycle_id', currentMeso.id)
                 .eq('user_id', user.id)
-                .order('start_date', { ascending: false })
+                .gte('start_date', today)
+                .order('start_date', { ascending: true })
                 .limit(1)
                 .maybeSingle()
 
-            microcycle = lastWeek
+            if (nextWeek) {
+                microcycle = nextWeek
+            } else {
+                const { data: lastWeek } = await supabase
+                    .from('microcycles')
+                    .select('id, start_date')
+                    .eq('mesocycle_id', currentMeso.id)
+                    .eq('user_id', user.id)
+                    .order('start_date', { ascending: false })
+                    .limit(1)
+                    .maybeSingle()
+
+                microcycle = lastWeek
+            }
         }
     }
 
@@ -979,7 +1020,9 @@ export async function regenerateSingleSession(
         // Add mode — find the current microcycle and pick the next available date
         const today = new Date().toISOString().split('T')[0]
 
-        const { data: microcycle, error: mcErr } = await supabase
+        let microcycle: { id: string; start_date: string; end_date: string } | null = null
+
+        const { data: exactWeek } = await supabase
             .from('microcycles')
             .select('id, start_date, end_date')
             .eq('user_id', user.id)
@@ -987,7 +1030,22 @@ export async function regenerateSingleSession(
             .gte('end_date', today)
             .maybeSingle()
 
-        if (mcErr || !microcycle) {
+        if (exactWeek) {
+            microcycle = exactWeek
+        } else {
+            // Fall back to nearest upcoming microcycle (onboarded mid-week)
+            const { data: upcoming } = await supabase
+                .from('microcycles')
+                .select('id, start_date, end_date')
+                .eq('user_id', user.id)
+                .gte('start_date', today)
+                .order('start_date', { ascending: true })
+                .limit(1)
+                .maybeSingle()
+            microcycle = upcoming
+        }
+
+        if (!microcycle) {
             return { success: false, error: 'No current training week found' }
         }
 
@@ -1309,12 +1367,35 @@ function mapModality(aiModality: Session['modality']): 'LIFTING' | 'CARDIO' | 'R
 function buildCoachNotes(session: Session, transparency: string): string | null {
     const parts: string[] = []
 
+    // For METCON sessions, the workoutDescription IS the workout — must be persisted
+    if (session.modality === 'METCON') {
+        const condSession = session as ConditioningSession
+        if (condSession.workoutDescription) {
+            parts.push(`WORKOUT:\n${condSession.workoutDescription}`)
+        }
+        const meta: string[] = []
+        if (condSession.conditioningType) meta.push(condSession.conditioningType.toUpperCase())
+        if (condSession.targetIntensity) meta.push(`Intensity: ${condSession.targetIntensity}`)
+        if (condSession.estimatedDurationMinutes) meta.push(`~${condSession.estimatedDurationMinutes} min`)
+        if (meta.length > 0) parts.push(meta.join(' · '))
+    }
+
+    // For MOBILITY sessions, the description IS the session content
+    if (session.modality === 'MOBILITY') {
+        const mobSession = session as MobilitySession
+        if (mobSession.description) {
+            parts.push(`SESSION:\n${mobSession.description}`)
+        }
+        if (mobSession.focusAreas?.length) {
+            parts.push(`Focus: ${mobSession.focusAreas.join(', ')}`)
+        }
+    }
+
     if (session.coachNotes) {
         parts.push(session.coachNotes)
     }
 
     if (transparency === 'detailed') {
-        // Add extra context for "show me the science" users
         if (session.modality === 'LIFTING') {
             const liftSession = session as LiftingSession
             if (liftSession.mobilityPrimer) {
@@ -1329,7 +1410,7 @@ function buildCoachNotes(session: Session, transparency: string): string | null 
         }
     }
 
-    return parts.length > 0 ? parts.join(' | ') : null
+    return parts.length > 0 ? parts.join('\n\n') : null
 }
 
 /**

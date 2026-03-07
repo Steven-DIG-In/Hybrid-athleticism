@@ -32,6 +32,7 @@ import { SessionRegenDrawer } from './SessionRegenDrawer'
 import { WeekCalendar } from './WeekCalendar'
 import { ConflictWarning } from './ConflictWarning'
 import { computeWeekLoad } from '@/lib/scheduling/load-scoring'
+import { MesocyclePlanView } from './MesocyclePlanView'
 import type { DashboardData, WorkoutWithSets, DayLoadSummary } from '@/lib/types/training.types'
 
 // ─── Modality Config ────────────────────────────────────────────────────────
@@ -346,7 +347,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
 
     const handleAllocate = () => {
         startAllocate(async () => {
-            const result = await allocateSessionDates()
+            const result = await allocateSessionDates(data.currentWeek?.id)
             if (result.success) {
                 router.refresh()
             } else {
@@ -357,7 +358,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
 
     const handleDeallocate = () => {
         startDeallocate(async () => {
-            const result = await deallocateAllSessions()
+            const result = await deallocateAllSessions(data.currentWeek?.id)
             if (result.success) {
                 setSelectedSessionId(null)
                 setPendingConflicts(null)
@@ -388,7 +389,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
     const handleRegenerate = () => {
         setGenerationError(null)
         startRegenerate(async () => {
-            const result = await regenerateCurrentWeekPool()
+            const result = await regenerateCurrentWeekPool(data.currentWeek?.id)
             if (result.success) {
                 router.refresh()
             } else {
@@ -743,6 +744,14 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                     </span>
                 </div>
             </div>
+
+            {/* ─── Training Plan (expandable) ──────────────── */}
+            {currentMesocycle && (
+                <MesocyclePlanView
+                    mesocycle={currentMesocycle}
+                    currentWeekNumber={currentWeekNumber}
+                />
+            )}
 
             {/* ─── Week Progress Bar ─────────────────────────── */}
             {totalCount > 0 && (
