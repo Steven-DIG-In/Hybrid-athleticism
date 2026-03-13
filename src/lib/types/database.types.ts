@@ -69,6 +69,7 @@ export interface Profile {
     id: string
     display_name: string | null
     avatar_url: string | null
+    display_weights_as_percentages: boolean | null
 
     // Legacy fields (still used by existing features)
     training_age_years: number | null
