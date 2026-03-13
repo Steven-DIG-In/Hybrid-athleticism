@@ -359,6 +359,7 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             .order('scheduled_date', { ascending: true })
 
         sessionPool = (workouts ?? []) as WorkoutWithSets[]
+        console.log('[getDashboardData] Fetched session pool:', sessionPool.length, 'workouts')
     }
 
     // Fetch ALL workouts across the entire mesocycle for the calendar view

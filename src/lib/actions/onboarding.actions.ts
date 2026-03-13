@@ -22,7 +22,7 @@ import type {
     BodyCompGoal,
     EquipmentUsageIntent,
 } from '@/lib/types/database.types'
-import { generateFirstWeekPool } from './programming.actions'
+import { generateMesocycleInventory } from './inventory-generation.actions'
 
 // ─── Input types ─────────────────────────────────────────────────────────────
 
@@ -445,18 +445,21 @@ export async function completeOnboarding(
         return { success: false, error: `Microcycle creation failed: ${microcycleError.message}` }
     }
 
-    // Step 4: Generate AI-powered session pool for week 1
-    // This calls the Programming Engine to produce actual workouts with exercises.
+    // Step 4: Generate unscheduled session inventory for entire mesocycle
+    // This calls the Programming Engine (multi-agent coaches) to generate sessions
+    // and stores them as unscheduled inventory. User allocates to calendar when ready.
     // We fire-and-forget here — if it fails, the user can regenerate from the dashboard.
     // The mesocycle shell + microcycles already exist, so the user lands on a valid dashboard.
     try {
-        const poolResult = await generateFirstWeekPool()
-        if (!poolResult.success) {
-            console.warn('[completeOnboarding] Session pool generation failed (non-blocking):', poolResult.error)
+        const inventoryResult = await generateMesocycleInventory(mesocycle.id, weekCount)
+        if (!inventoryResult.success) {
+            console.warn('[completeOnboarding] Inventory generation failed (non-blocking):', inventoryResult.error)
             // Don't fail onboarding — the user can regenerate from dashboard
+        } else {
+            console.log(`[completeOnboarding] Generated ${inventoryResult.data.sessions} sessions across ${inventoryResult.data.weeks} weeks`)
         }
     } catch (err) {
-        console.warn('[completeOnboarding] Session pool generation error (non-blocking):', err)
+        console.warn('[completeOnboarding] Inventory generation error (non-blocking):', err)
     }
 
     revalidatePath('/dashboard')

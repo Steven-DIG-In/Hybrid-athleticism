@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useState, useMemo, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -22,6 +22,7 @@ import {
     AlertTriangle,
     Plus,
     ArrowRightLeft,
+    Calendar,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,12 @@ import { WeekCalendar } from './WeekCalendar'
 import { ConflictWarning } from './ConflictWarning'
 import { computeWeekLoad } from '@/lib/scheduling/load-scoring'
 import { MesocyclePlanView } from './MesocyclePlanView'
+import { UnscheduledInventory } from './UnscheduledInventory'
+import { AllocationModal } from './AllocationModal'
+import { CurrentWeekSessions } from './CurrentWeekSessions'
 import type { DashboardData, WorkoutWithSets, DayLoadSummary } from '@/lib/types/training.types'
+import type { UnscheduledInventoryView } from '@/lib/types/inventory.types'
+import { getUnscheduledInventory } from '@/lib/actions/inventory.actions'
 
 // ─── Modality Config ────────────────────────────────────────────────────────
 
@@ -275,6 +281,16 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
     // Error state for generation feedback
     const [generationError, setGenerationError] = useState<string | null>(null)
 
+    // Inventory state
+    const [inventory, setInventory] = useState<UnscheduledInventoryView | null>(null)
+    const [loadingInventory, setLoadingInventory] = useState(false)
+
+    // Allocation modal state
+    const [allocationModal, setAllocationModal] = useState<{
+        isOpen: boolean
+        weekNumber: number | null
+    }>({ isOpen: false, weekNumber: null })
+
     const { currentMesocycle, currentWeek, sessionPool, allWorkouts, completedCount, totalCount, hasUnreviewedIntervention, weekHasWorkouts, athleteName, goalArchetype, equipmentList, endurancePreferences, conditioningPreferences, previousWeekIsDeload, hasUnallocatedSessions, mesocycleStartDate, mesocycleEndDate } = data
 
     // Split sessions into unallocated and allocated
@@ -286,6 +302,51 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
         if (!mesocycleStartDate || !mesocycleEndDate) return []
         return computeWeekLoad(allWorkouts, mesocycleStartDate, mesocycleEndDate)
     }, [allWorkouts, mesocycleStartDate, mesocycleEndDate])
+
+    // Fetch unscheduled inventory when component mounts or mesocycle changes
+    // Poll every 5 seconds if inventory is empty (generation in progress)
+    useEffect(() => {
+        if (!currentMesocycle?.id) return
+
+        let isMounted = true
+        let pollInterval: NodeJS.Timeout | null = null
+
+        const fetchInventory = async () => {
+            if (!isMounted) return
+
+            setLoadingInventory(true)
+            const result = await getUnscheduledInventory(currentMesocycle.id)
+
+            if (!isMounted) return
+
+            if (result.success && result.data) {
+                setInventory(result.data)
+
+                // Stop polling if we have inventory
+                if (result.data.totalSessions > 0 && pollInterval) {
+                    clearInterval(pollInterval)
+                    pollInterval = null
+                }
+            }
+            setLoadingInventory(false)
+        }
+
+        // Initial fetch
+        fetchInventory()
+
+        // Start polling after 5 seconds (give time for first fetch)
+        const startPolling = setTimeout(() => {
+            if (isMounted) {
+                pollInterval = setInterval(fetchInventory, 5000)
+            }
+        }, 5000)
+
+        return () => {
+            isMounted = false
+            clearTimeout(startPolling)
+            if (pollInterval) clearInterval(pollInterval)
+        }
+    }, [currentMesocycle?.id])
 
     const openRegenDrawer = (workoutId: string, workoutName: string) => {
         setDrawerMode('regenerate')
@@ -432,219 +493,73 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
         longevity: 'Longevity',
     }
 
-    // ─── Session Pool Sidebar Content ───────────────────────────────────────
+    // Inventory handlers
+    const handleAllocateWeek = (week: number) => {
+        setAllocationModal({ isOpen: true, weekNumber: week })
+    }
+
+    const handleScheduleSession = (sessionId: string) => {
+        console.log('Schedule session:', sessionId)
+        // TODO: Open date picker for single session
+        alert(`Schedule session ${sessionId} - Date picker integration coming next!`)
+    }
+
+    const handleAllocationComplete = () => {
+        // Close modal
+        setAllocationModal({ isOpen: false, weekNumber: null })
+
+        // Refresh inventory
+        if (currentMesocycle?.id) {
+            setLoadingInventory(true)
+            getUnscheduledInventory(currentMesocycle.id).then(result => {
+                if (result.success && result.data) {
+                    setInventory(result.data)
+                }
+                setLoadingInventory(false)
+            })
+        }
+
+        // Refresh page data
+        router.refresh()
+    }
+
+    // ─── Session Inventory Sidebar Content ───────────────────────────────────────
     const poolContent = (
         <div className="space-y-2">
             <div className="flex justify-between items-end px-1 mb-1">
-                <h2 className="text-lg font-space-grotesk font-bold tracking-tight text-white uppercase">Session Pool</h2>
+                <h2 className="text-lg font-space-grotesk font-bold tracking-tight text-white uppercase">Session Inventory</h2>
             </div>
 
-            {/* Week navigation */}
-            <div className="flex items-center justify-between px-1 mb-2">
-                <button
-                    onClick={() => navigateWeek('prev')}
-                    disabled={currentWeekNumber <= 1}
-                    className="p-1 text-neutral-500 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                >
-                    <ChevronLeft className="w-4 h-4" />
-                </button>
-                <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-space-grotesk font-bold text-white">
-                        Week {currentWeekNumber}{currentWeek?.is_deload ? ' (Deload)' : ''}
-                    </span>
-                    <span className="text-[10px] font-mono text-neutral-500">
-                        {currentWeek?.start_date ? new Date(currentWeek.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                        {' — '}
-                        {currentWeek?.end_date ? new Date(currentWeek.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                    </span>
+            {/* Unscheduled Inventory Component */}
+            {loadingInventory ? (
+                <div className="border border-[#222222] bg-[#0a0a0a] p-8 text-center">
+                    <Loader2 className="w-6 h-6 text-cyan-500 mx-auto mb-3 animate-spin" />
+                    <p className="text-xs text-neutral-400">Loading inventory...</p>
                 </div>
-                <button
-                    onClick={() => navigateWeek('next')}
-                    disabled={currentWeekNumber >= data.totalWeeks}
-                    className="p-1 text-neutral-500 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                >
-                    <ChevronRight className="w-4 h-4" />
-                </button>
-            </div>
-
-            {generationError && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono mb-2">
-                    <div className="flex items-center gap-2 mb-1">
-                        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                        <span className="font-bold uppercase text-[10px]">Generation Failed</span>
-                    </div>
-                    <p className="leading-relaxed">{generationError}</p>
-                    <button onClick={() => setGenerationError(null)} className="mt-2 text-[10px] text-neutral-500 hover:text-neutral-300 uppercase tracking-widest">
-                        Dismiss
-                    </button>
-                </div>
-            )}
-
-            {weekHasWorkouts ? (
-                <div className="space-y-3">
-                    {/* ─── Unassigned Sessions ─────────────────────── */}
-                    {unallocatedSessions.length > 0 && (
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between px-1">
-                                <span className="text-[10px] font-mono text-amber-400/70 uppercase tracking-widest">
-                                    Unassigned ({unallocatedSessions.length})
-                                </span>
-                            </div>
-
-                            {unallocatedSessions.map((workout, i) => (
-                                <div
-                                    key={workout.id}
-                                    draggable={!workout.is_completed}
-                                    onDragStart={(e) => {
-                                        e.dataTransfer.setData('text/plain', workout.id)
-                                        e.dataTransfer.effectAllowed = 'move'
-                                        setDraggingSessionId(workout.id)
-                                    }}
-                                    onDragEnd={() => setDraggingSessionId(null)}
-                                    className={!workout.is_completed ? 'cursor-grab active:cursor-grabbing' : ''}
-                                >
-                                    <SessionCard
-                                        workout={workout}
-                                        index={i}
-                                        onRegenerate={() => openRegenDrawer(workout.id, workout.name)}
-                                    />
-                                </div>
-                            ))}
-
-                            {/* Allocate Sessions Button */}
-                            <Button
-                                onClick={handleAllocate}
-                                disabled={isAllocating}
-                                className="w-full h-11 bg-cyan-500 text-black hover:bg-cyan-400 font-bold tracking-wide text-xs uppercase"
-                            >
-                                {isAllocating ? (
-                                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Allocating...</>
-                                ) : (
-                                    <><Sparkles className="w-4 h-4 mr-2" /> Allocate Sessions</>
-                                )}
-                            </Button>
-                        </div>
-                    )}
-
-                    {/* ─── Scheduled Sessions ──────────────────────── */}
-                    {allocatedSessions.length > 0 && (
-                        <div className="space-y-2">
-                            {unallocatedSessions.length > 0 && (
-                                <div className="flex items-center justify-between px-1 pt-1">
-                                    <span className="text-[10px] font-mono text-cyan-500/60 uppercase tracking-widest">
-                                        Scheduled ({allocatedSessions.length})
-                                    </span>
-                                </div>
-                            )}
-
-                            {allocatedSessions.map((workout, i) => (
-                                <SessionCard
-                                    key={workout.id}
-                                    workout={workout}
-                                    index={unallocatedSessions.length + i}
-                                    onRegenerate={() => openRegenDrawer(workout.id, workout.name)}
-                                    onMoveSession={handleMoveSession}
-                                    isSelectedForMove={selectedSessionId === workout.id}
-                                />
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Show all sessions without sections when everything is allocated and nothing is unallocated */}
-                    {unallocatedSessions.length === 0 && allocatedSessions.length === 0 && sessionPool.map((workout, i) => (
-                        <SessionCard
-                            key={workout.id}
-                            workout={workout}
-                            index={i}
-                            onRegenerate={() => openRegenDrawer(workout.id, workout.name)}
-                            onMoveSession={handleMoveSession}
-                            isSelectedForMove={selectedSessionId === workout.id}
-                        />
-                    ))}
-                </div>
+            ) : inventory && Object.keys(inventory.weekGroups).length > 0 ? (
+                <UnscheduledInventory
+                    inventory={inventory}
+                    onAllocateWeek={handleAllocateWeek}
+                    onScheduleSession={handleScheduleSession}
+                />
             ) : (
                 <div className="border border-[#222222] bg-[#0a0a0a] p-8 text-center">
-                    <Target className="w-10 h-10 text-neutral-600 mx-auto mb-3" />
-                    <h3 className="text-sm font-space-grotesk text-neutral-300 mb-1">No Sessions Generated</h3>
+                    <Target className="w-10 h-10 text-neutral-600 mx-auto mb-3 animate-pulse" />
+                    <h3 className="text-sm font-space-grotesk text-neutral-300 mb-1">Generating Training Program...</h3>
                     <p className="text-[10px] text-neutral-500 font-inter mb-4">
-                        The AI hasn&apos;t generated sessions for this week yet.
+                        AI coaches are building your 6-week program. This takes 30-60 seconds.
                     </p>
                     <Button
-                        onClick={handleGenerateNext}
-                        disabled={isGeneratingNext}
-                        variant="chrome"
-                        className="mx-auto"
-                    >
-                        {isGeneratingNext ? (
-                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
-                        ) : (
-                            <><Sparkles className="w-4 h-4 mr-2" /> Generate Sessions</>
-                        )}
-                    </Button>
-                </div>
-            )}
-
-            {/* Post-deload benchmark suggestion */}
-            {previousWeekIsDeload && weekHasWorkouts && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                    <button
-                        onClick={openAddDrawer}
-                        className="w-full border border-amber-500/20 bg-amber-500/5 p-3 text-left transition-colors hover:bg-amber-500/10"
-                    >
-                        <div className="flex items-center gap-3">
-                            <Target className="w-4 h-4 text-amber-400 shrink-0" />
-                            <div className="flex-1">
-                                <span className="text-[11px] text-amber-300 font-space-grotesk font-bold">Fresh off a deload</span>
-                                <p className="text-[10px] text-neutral-500 font-inter">Good time to re-benchmark? Add a benchmark session.</p>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-amber-500/50" />
-                        </div>
-                    </button>
-                </motion.div>
-            )}
-
-            {/* Actions */}
-            {weekHasWorkouts && (
-                <div className="flex flex-col gap-2 pt-1">
-                    <Button
+                        onClick={() => router.refresh()}
                         variant="ghost"
                         size="sm"
-                        className="w-full border border-dashed border-white/10 text-[10px] h-10 hover:border-cyan-500/30 hover:bg-cyan-950/10"
-                        onClick={openAddDrawer}
+                        className="text-xs text-cyan-400 hover:text-cyan-300"
                     >
-                        <Plus className="w-3 h-3 mr-1.5" /> Add Session
+                        <RefreshCw className="w-3 h-3 mr-1.5" /> Refresh
                     </Button>
-
-                    <div className="flex gap-2">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="flex-1 border border-white/5 text-[10px]"
-                            onClick={handleRegenerate}
-                            disabled={isRegenerating}
-                        >
-                            {isRegenerating ? (
-                                <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Regenerating...</>
-                            ) : (
-                                <><RefreshCw className="w-3 h-3 mr-1.5" /> Regenerate Week</>
-                            )}
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="flex-1 border border-white/5 text-[10px]"
-                            onClick={handleGenerateNext}
-                            disabled={isGeneratingNext}
-                        >
-                            {isGeneratingNext ? (
-                                <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Generating...</>
-                            ) : (
-                                <><Sparkles className="w-3 h-3 mr-1.5" /> Next Week</>
-                            )}
-                        </Button>
-                    </div>
                 </div>
             )}
+
         </div>
     )
 
@@ -654,8 +569,31 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
     const calendarWeekEnd = currentWeek?.end_date ?? mesocycleEndDate
 
     const calendarContent = calendarWeekStart && calendarWeekEnd ? (
+        <div className="space-y-4">
+            {/* This Week's Sessions - for reviewing and starting workouts */}
+            <CurrentWeekSessions
+                sessions={allWorkouts}
+                weekStartDate={calendarWeekStart}
+                weekEndDate={calendarWeekEnd}
+            />
+
+            {/* Link to full planner */}
+            <div className="flex justify-center">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/planner')}
+                    className="text-cyan-400 border-cyan-500/30 hover:bg-cyan-950/20 hover:border-cyan-500/50"
+                >
+                    <Calendar className="w-3 h-3 mr-1.5" />
+                    Open Full Calendar Planner
+                </Button>
+            </div>
+        </div>
+    ) : null
+
+    const oldCalendarContent = calendarWeekStart && calendarWeekEnd ? (
         <div className="space-y-3">
-            {/* Clear Calendar button — only show when sessions are allocated */}
             {allocatedSessions.filter(w => !w.is_completed).length > 0 && (
                 <div className="flex justify-end">
                     <Button
@@ -698,7 +636,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                 />
             )}
         </div>
-    ) : null
+    ) : (null as any)
 
     return (
         <div className="flex flex-col gap-5 pt-2 pb-8 relative">
@@ -799,6 +737,15 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                 endurancePreferences={endurancePreferences}
                 conditioningPreferences={conditioningPreferences}
                 previousWeekIsDeload={previousWeekIsDeload}
+            />
+
+            {/* ─── Allocation Modal ─────────────────────────── */}
+            <AllocationModal
+                isOpen={allocationModal.isOpen}
+                weekNumber={allocationModal.weekNumber}
+                mesocycleId={currentMesocycle?.id}
+                onClose={() => setAllocationModal({ isOpen: false, weekNumber: null })}
+                onComplete={handleAllocationComplete}
             />
         </div>
     )

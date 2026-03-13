@@ -8,12 +8,15 @@ import {
     ArrowLeft, CheckCircle2, Loader2, ChevronLeft, ChevronRight,
     SkipForward, X, AlertTriangle, RefreshCw, Check, ChevronDown, Info
 } from "lucide-react"
-import { completeWorkout, swapExercise } from "@/lib/actions/workout.actions"
+import { completeWorkout, swapExercise, getExerciseHistory } from "@/lib/actions/workout.actions"
 import type { ConditioningResultInput } from "@/lib/actions/workout.actions"
-import { updateExerciseSet, updateExerciseSetTargets } from "@/lib/actions/logging.actions"
+import { updateExerciseSet, updateExerciseSetTargets, logCardioSession } from "@/lib/actions/logging.actions"
 import { RestTimer, suggestRestSeconds } from "@/components/workout/RestTimer"
+import { ExerciseHistoryPanel } from "@/components/workout/ExerciseHistoryPanel"
+import { CoachNotesBanner } from "@/components/workout/CoachNotesBanner"
 import type { WorkoutWithSets } from "@/lib/types/training.types"
 import type { ExerciseSet } from "@/lib/types/database.types"
+import { estimate1RM } from "@/lib/training/methodology-helpers"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -168,6 +171,8 @@ function ConditioningLogger({
     // Detect workout format from meta line
     const format = useMemo(() => detectFormat(parsedNotes.meta), [parsedNotes.meta])
     const isMetcon = workout.modality === 'METCON'
+    const isEndurance = workout.modality === 'CARDIO'
+    const shouldShowStructuredWorkout = isMetcon || isEndurance
 
     // Result state
     const [isRx, setIsRx] = useState(true)
@@ -182,10 +187,40 @@ function ConditioningLogger({
     const [partialReps, setPartialReps] = useState("")
     const [completed, setCompleted] = useState(true)
 
+    // Endurance-specific result state (Issue #7)
+    const [distanceKm, setDistanceKm] = useState("")
+    const [avgHeartRate, setAvgHeartRate] = useState("")
+
     const handleComplete = useCallback(() => {
         startTransition(async () => {
             try {
                 const durationMinutes = Math.round((Date.now() - startTimeRef.current) / 60000)
+
+                // Handle endurance session logging (Issue #7)
+                if (isEndurance) {
+                    const dist = parseFloat(distanceKm)
+                    const mins = parseInt(timeMinutes) || 0
+                    const secs = parseInt(timeSeconds) || 0
+                    const totalMinutes = mins + secs / 60
+
+                    // Calculate pace if both distance and time provided
+                    let avgPaceSecPerKm: number | undefined
+                    if (dist > 0 && totalMinutes > 0) {
+                        const paceMinPerKm = totalMinutes / dist
+                        avgPaceSecPerKm = Math.round(paceMinPerKm * 60)
+                    }
+
+                    // Log cardio session
+                    await logCardioSession({
+                        workoutId: workout.id,
+                        durationMinutes: Math.max(durationMinutes, 1),
+                        distanceKm: dist > 0 ? dist : undefined,
+                        avgPaceSecPerKm,
+                        avgHeartRateBpm: avgHeartRate ? parseInt(avgHeartRate) : undefined,
+                        perceivedEffortRpe: rpe,
+                        cardioType: 'ZONE_2', // Default, could be inferred from parsedNotes.meta
+                    })
+                }
 
                 // Build conditioning result (only for METCON sessions)
                 let conditioningResult: ConditioningResultInput | undefined
@@ -230,8 +265,9 @@ function ConditioningLogger({
                 setError("Network error completing workout. Try again.")
             }
         })
-    }, [workout.id, router, startTransition, isMetcon, format, isRx, rpe, modifications,
-        athleteNotes, timeMinutes, timeSeconds, rounds, partialReps, completed, setError, startTimeRef])
+    }, [workout.id, router, startTransition, isMetcon, isEndurance, format, isRx, rpe, modifications,
+        athleteNotes, timeMinutes, timeSeconds, rounds, partialReps, completed, distanceKm, avgHeartRate,
+        setError, startTimeRef])
 
     return (
         <div className="min-h-screen bg-[#000000] text-white flex flex-col pt-12">
@@ -254,20 +290,28 @@ function ConditioningLogger({
                     <p className="text-xs font-mono text-cyan-400/80 mt-1">{parsedNotes.meta}</p>
                 )}
 
+                {/* For ENDURANCE: Show coach notes FIRST (contains essential workout details) */}
+                {isEndurance && parsedNotes.coaching && (
+                    <div className="mt-5 p-5 bg-cyan-950/30 border border-cyan-500/30 rounded">
+                        <p className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 mb-3">📍 Workout Details</p>
+                        <p className="text-base font-inter text-white leading-relaxed whitespace-pre-wrap">{parsedNotes.coaching}</p>
+                    </div>
+                )}
+
                 {/* The actual workout — movements, reps, format */}
                 {parsedNotes.workout ? (
                     <div className="mt-5 p-5 bg-[#0a0a0a] border border-cyan-500/20 rounded">
                         <p className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 mb-3">The Workout</p>
                         <p className="text-base font-inter text-white leading-relaxed whitespace-pre-wrap">{parsedNotes.workout}</p>
                     </div>
-                ) : workout.coach_notes ? (
+                ) : workout.coach_notes && !isEndurance ? (
                     <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#222] rounded whitespace-pre-wrap">
                         <p className="text-sm font-inter text-neutral-300 leading-relaxed">{workout.coach_notes}</p>
                     </div>
                 ) : null}
 
-                {/* Coach tips */}
-                {parsedNotes.coaching && (
+                {/* Coach tips for METCON (shown after workout description) */}
+                {!isEndurance && parsedNotes.coaching && (
                     <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#1a1a1a] rounded">
                         <p className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-2">Coach Notes</p>
                         <p className="text-sm font-inter text-neutral-400 leading-relaxed whitespace-pre-wrap">{parsedNotes.coaching}</p>
@@ -275,9 +319,14 @@ function ConditioningLogger({
                 )}
 
                 {!workout.coach_notes && (
-                    <p className="text-neutral-500 font-inter text-sm mt-4">
-                        No workout details available. Complete when done.
-                    </p>
+                    <div className="mt-4 p-4 bg-amber-950/20 border border-amber-500/30 rounded">
+                        <p className="text-sm font-inter text-amber-300 leading-relaxed">
+                            {isEndurance
+                                ? "⚠️ No workout details provided. This should include distance, duration, and target pace. Please check with your coach or log the session as performed."
+                                : "No workout details available. Complete when done."
+                            }
+                        </p>
+                    </div>
                 )}
 
                 {/* ═══ LOG YOUR RESULT ═══ (METCON only) */}
@@ -457,6 +506,123 @@ function ConditioningLogger({
                         </div>
                     </div>
                 )}
+
+                {/* ═══ LOG YOUR ENDURANCE RESULT ═══ (CARDIO only) - Issue #7 */}
+                {isEndurance && (
+                    <div className="mt-8 space-y-5">
+                        <div className="flex items-center gap-3">
+                            <div className="h-px flex-1 bg-[#222]" />
+                            <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-neutral-500">
+                                Log Your Session
+                            </span>
+                            <div className="h-px flex-1 bg-[#222]" />
+                        </div>
+
+                        {/* Distance & Time Input */}
+                        <div className="border border-[#222] bg-[#0a0a0a] p-4 space-y-4">
+                            <div>
+                                <p className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-3">
+                                    Distance & Time
+                                </p>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div className="relative">
+                                        <span className="absolute top-1 left-2 text-[8px] font-mono text-neutral-500">KM</span>
+                                        <input
+                                            type="number"
+                                            inputMode="decimal"
+                                            step="0.1"
+                                            placeholder="0.0"
+                                            value={distanceKm}
+                                            onChange={(e) => setDistanceKm(e.target.value)}
+                                            className="w-full bg-[#111] border border-[#2a2a2a] h-14 text-center text-2xl font-space-grotesk focus:border-cyan-500 focus:outline-none"
+                                            disabled={isPending}
+                                        />
+                                    </div>
+                                    <div className="relative">
+                                        <span className="absolute top-1 left-2 text-[8px] font-mono text-neutral-500">AVG HR</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            placeholder="Optional"
+                                            value={avgHeartRate}
+                                            onChange={(e) => setAvgHeartRate(e.target.value)}
+                                            className="w-full bg-[#111] border border-[#2a2a2a] h-14 text-center text-2xl font-space-grotesk focus:border-cyan-500 focus:outline-none"
+                                            disabled={isPending}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1 relative">
+                                        <span className="absolute top-1 left-2 text-[8px] font-mono text-neutral-500">MIN</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            placeholder="0"
+                                            value={timeMinutes}
+                                            onChange={(e) => setTimeMinutes(e.target.value)}
+                                            className="w-full bg-[#111] border border-[#2a2a2a] h-14 text-center text-2xl font-space-grotesk focus:border-cyan-500 focus:outline-none"
+                                            disabled={isPending}
+                                        />
+                                    </div>
+                                    <span className="text-2xl font-space-grotesk text-neutral-500">:</span>
+                                    <div className="flex-1 relative">
+                                        <span className="absolute top-1 left-2 text-[8px] font-mono text-neutral-500">SEC</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            placeholder="00"
+                                            value={timeSeconds}
+                                            onChange={(e) => setTimeSeconds(e.target.value)}
+                                            className="w-full bg-[#111] border border-[#2a2a2a] h-14 text-center text-2xl font-space-grotesk focus:border-cyan-500 focus:outline-none"
+                                            disabled={isPending}
+                                            max={59}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Auto-calculated pace */}
+                            {distanceKm && (timeMinutes || timeSeconds) && (() => {
+                                const dist = parseFloat(distanceKm)
+                                const totalMinutes = (parseInt(timeMinutes) || 0) + (parseInt(timeSeconds) || 0) / 60
+                                if (dist > 0 && totalMinutes > 0) {
+                                    const paceMinPerKm = totalMinutes / dist
+                                    const paceMin = Math.floor(paceMinPerKm)
+                                    const paceSec = Math.round((paceMinPerKm - paceMin) * 60)
+                                    return (
+                                        <div className="mt-3 p-3 bg-cyan-950/20 border border-cyan-900/30 rounded text-center">
+                                            <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest block mb-1">
+                                                Average Pace
+                                            </span>
+                                            <span className="text-xl font-space-grotesk font-bold text-cyan-300">
+                                                {paceMin}:{paceSec.toString().padStart(2, '0')} /km
+                                            </span>
+                                        </div>
+                                    )
+                                }
+                                return null
+                            })()}
+                        </div>
+
+                        {/* RPE Selector */}
+                        <RPESelector value={rpe} onChange={setRpe} disabled={isPending} />
+
+                        {/* Notes */}
+                        <div>
+                            <label className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 block mb-2">
+                                Session Notes
+                            </label>
+                            <input
+                                type="text"
+                                placeholder="How did it feel? Any observations?"
+                                value={athleteNotes}
+                                onChange={(e) => setAthleteNotes(e.target.value)}
+                                className="w-full bg-[#111] border border-[#2a2a2a] px-3 h-11 text-sm font-inter text-white placeholder:text-neutral-600 focus:border-cyan-500/50 focus:outline-none"
+                                disabled={isPending}
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             {error && (
@@ -489,7 +655,13 @@ function ConditioningLogger({
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
+export function WorkoutLogger({
+    workout,
+    displayWeightsAsPercentages = false
+}: {
+    workout: WorkoutWithSets
+    displayWeightsAsPercentages?: boolean
+}) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
 
@@ -508,6 +680,7 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
     // Pre-flight: expanded exercise for target editing (#8, #18)
     const [expandedExercise, setExpandedExercise] = useState<string | null>(null)
     const [targetEdits, setTargetEdits] = useState<Record<string, { weight: string; reps: string }>>({})
+    const [workingMaxEdits, setWorkingMaxEdits] = useState<Record<string, string>>({})
 
     // Group sets by exercise name to create the pagination flow
     const exerciseNames = Array.from(new Set(workout.exercise_sets.map(s => s.exercise_name)))
@@ -544,6 +717,14 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
     // Rest timer state (Issue #13)
     const [restTimerSeconds, setRestTimerSeconds] = useState<number | null>(null)
 
+    // Exercise history state (Issue #4)
+    const [exerciseHistory, setExerciseHistory] = useState<Record<string, any[]>>({})
+    const [loadingHistory, setLoadingHistory] = useState(false)
+
+    // Coach notes completion tracking (Issue #2)
+    const [completedExercises, setCompletedExercises] = useState<Set<string>>(new Set())
+    const [activeCoachNote, setActiveCoachNote] = useState<string | null>(null)
+
     const activeSets = workout.exercise_sets.filter(s => s.exercise_name === currentExerciseName)
     const currentExerciseData = activeSets[0]
     const currentTempo = extractTempo(currentExerciseData?.notes ?? null)
@@ -553,12 +734,45 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
     const totalSets = workout.exercise_sets.length
     const divergence = detectPerformanceDivergence(workout.exercise_sets)
 
+    // Working max calculation for percentage display (Issue #3)
+    const workingMaxData = useMemo(() => {
+        if (!displayWeightsAsPercentages || isBW) return null
+
+        const weights = activeSets
+            .map(s => s.target_weight_kg)
+            .filter((w): w is number => w !== null && w > 0)
+
+        if (weights.length === 0) return null
+
+        const workingMax = Math.max(...weights)
+        // Estimate 1RM from working max (assume it's around 3-5 reps range, use 4 as middle)
+        const estimated1RM = estimate1RM(workingMax, 4)
+
+        return { workingMax, estimated1RM }
+    }, [displayWeightsAsPercentages, activeSets, isBW])
+
     // Clear error after 5 seconds
     useEffect(() => {
         if (!error) return
         const t = setTimeout(() => setError(null), 5000)
         return () => clearTimeout(t)
     }, [error])
+
+    // Fetch exercise history when exercise changes (Issue #4)
+    useEffect(() => {
+        if (!currentExerciseName || exerciseHistory[currentExerciseName]) return
+
+        setLoadingHistory(true)
+        getExerciseHistory(currentExerciseName, 3).then(result => {
+            if (result.success && result.data) {
+                setExerciseHistory(prev => ({
+                    ...prev,
+                    [currentExerciseName]: result.data
+                }))
+            }
+            setLoadingHistory(false)
+        })
+    }, [currentExerciseName, exerciseHistory])
 
     // ─── Set Completion with Error Handling (Issue #15) ──────────────────────
 
@@ -587,10 +801,11 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
             try {
                 let result
                 if (isAlreadyCompleted) {
+                    // Uncomplete: set to null to mark as incomplete (not 0)
                     result = await updateExerciseSet(setId, {
-                        actualReps: 0,
-                        actualWeightKg: 0,
-                        rirActual: 0
+                        actualReps: null,
+                        actualWeightKg: null,
+                        rirActual: null
                     })
                 } else {
                     result = await updateExerciseSet(setId, {
@@ -649,6 +864,24 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
                                     reps: prev[nextSet.id]?.reps ?? values.reps,
                                 }
                             }))
+                        }
+
+                        // Check if all sets for this exercise are now complete (Issue #2)
+                        const allSetsForExercise = workout.exercise_sets.filter(s => s.exercise_name === set.exercise_name)
+                        const allComplete = allSetsForExercise.every(s =>
+                            s.id === setId || s.actual_reps !== null
+                        )
+
+                        if (allComplete && !completedExercises.has(set.exercise_name)) {
+                            // Mark exercise as completed
+                            setCompletedExercises(prev => new Set(prev).add(set.exercise_name))
+
+                            // Show coach note if available
+                            if (set.notes) {
+                                setActiveCoachNote(set.notes)
+                                // Auto-dismiss after 10 seconds
+                                setTimeout(() => setActiveCoachNote(null), 10000)
+                            }
                         }
                     }
                 }
@@ -910,6 +1143,61 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
                                     {/* Expanded: editable targets per set (#8, #18) */}
                                     {isExpanded && (
                                         <div className="mt-3 space-y-2 border-t border-[#1a1a1a] pt-3">
+                                            {/* Working Max Editor */}
+                                            {(() => {
+                                                const weights = sets
+                                                    .map(s => s.target_weight_kg)
+                                                    .filter((w): w is number => w !== null && w > 0)
+                                                const currentWorkingMax = weights.length > 0 ? Math.max(...weights) : 0
+                                                const workingMaxValue = workingMaxEdits[name] ?? currentWorkingMax.toString()
+
+                                                return currentWorkingMax > 0 && !isBodyweightExercise(name) ? (
+                                                    <div className="p-4 bg-cyan-950/20 border border-cyan-900/30 rounded-md mb-4">
+                                                        <label className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 block mb-2">
+                                                            Working Max (all sets will adjust proportionally)
+                                                        </label>
+                                                        <div className="flex items-center gap-3">
+                                                            <input
+                                                                type="number"
+                                                                inputMode="decimal"
+                                                                step="2.5"
+                                                                value={workingMaxValue}
+                                                                onChange={(e) => {
+                                                                    const newMax = parseFloat(e.target.value) || 0
+                                                                    setWorkingMaxEdits(prev => ({ ...prev, [name]: e.target.value }))
+
+                                                                    if (newMax > 0 && currentWorkingMax > 0) {
+                                                                        // Calculate ratio and update all sets
+                                                                        const ratio = newMax / currentWorkingMax
+                                                                        const updates: Record<string, { weight: string; reps: string }> = {}
+
+                                                                        sets.forEach(set => {
+                                                                            if (set.target_weight_kg && set.target_weight_kg > 0) {
+                                                                                const newWeight = Math.round(set.target_weight_kg * ratio * 2) / 2 // Round to nearest 2.5kg
+                                                                                updates[set.id] = {
+                                                                                    weight: newWeight.toString(),
+                                                                                    reps: set.target_reps?.toString() ?? ""
+                                                                                }
+                                                                            }
+                                                                        })
+
+                                                                        setTargetEdits(prev => ({ ...prev, ...updates }))
+                                                                    }
+                                                                }}
+                                                                className="flex-1 bg-[#111] border border-cyan-900/50 h-12 px-3 text-center text-xl font-space-grotesk text-white focus:border-cyan-500 focus:outline-none"
+                                                            />
+                                                            <span className="text-sm font-mono text-neutral-400">kg</span>
+                                                            <div className="text-right min-w-[80px]">
+                                                                <span className="text-[8px] font-mono text-neutral-500 uppercase block">Est. 1RM</span>
+                                                                <span className="text-sm font-space-grotesk font-semibold text-neutral-400">
+                                                                    {estimate1RM(parseFloat(workingMaxValue) || currentWorkingMax, 5)}kg
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : null
+                                            })()}
+
                                             <div className="flex items-center gap-2 mb-2">
                                                 <span className="text-[9px] font-mono text-yellow-500/70 uppercase tracking-widest">
                                                     AI Estimates — adjust if needed
@@ -1161,9 +1449,29 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
                 </div>
 
                 {/* Massive typography for high-stress visibility */}
-                <h1 className="text-4xl md:text-5xl font-space-grotesk font-bold tracking-tight leading-none mb-6 text-white text-shadow-glow">
+                <h1 className="text-4xl md:text-5xl font-space-grotesk font-bold tracking-tight leading-none mb-3 text-white text-shadow-glow">
                     {currentExerciseName}
                 </h1>
+
+                {/* Working Max Display (when percentage mode enabled) */}
+                {workingMaxData && (
+                    <div className="mb-4 p-3 bg-cyan-950/20 border border-cyan-900/30 rounded-md">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest">Working Max</span>
+                                <p className="text-2xl font-space-grotesk font-bold text-cyan-300">
+                                    {workingMaxData.workingMax}kg
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest">Est. 1RM</span>
+                                <p className="text-lg font-space-grotesk font-semibold text-neutral-400">
+                                    {workingMaxData.estimated1RM}kg
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex gap-4 mb-4">
                     <div className="flex-1 bg-[#0a0a0a] border border-[#222222] p-3 text-center">
@@ -1187,6 +1495,16 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
                         </div>
                     )}
                 </div>
+
+                {/* Exercise History Panel (Issue #4) */}
+                {!isBW && (
+                    <ExerciseHistoryPanel
+                        exerciseName={currentExerciseName}
+                        history={exerciseHistory[currentExerciseName] || []}
+                        loading={loadingHistory}
+                        targetReps={currentExerciseData?.target_reps}
+                    />
+                )}
 
                 {/* Coach notes for this exercise (#24) */}
                 {currentExerciseData?.notes && !currentTempo && (
@@ -1247,8 +1565,15 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
                                     } p-4`}
                             >
                                 <div className="flex items-center gap-4 mb-4">
-                                    <div className="flex-shrink-0 w-8 text-center text-sm font-mono text-neutral-500">
-                                        {set.set_number}
+                                    <div className="flex-shrink-0 w-14 text-center">
+                                        <div className="text-sm font-mono text-neutral-500">
+                                            {set.set_number}
+                                        </div>
+                                        {workingMaxData && set.target_weight_kg && (
+                                            <div className="text-[10px] font-mono text-cyan-400">
+                                                {Math.round((set.target_weight_kg / workingMaxData.workingMax) * 100)}%
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex-1 grid grid-cols-2 gap-3">
@@ -1336,7 +1661,7 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
                     <Button
                         variant="outline"
                         onClick={handlePrevious}
-                        disabled={isFirstExercise || isPending}
+                        disabled={isPending}
                         className="h-14 px-4 border-[#333333] text-neutral-300 disabled:opacity-30"
                     >
                         <ChevronLeft className="w-5 h-5" />
@@ -1394,6 +1719,11 @@ export function WorkoutLogger({ workout }: { workout: WorkoutWithSets }) {
                 </div>
             </div>
 
+            {/* Coach Notes Banner (Issue #2) */}
+            <CoachNotesBanner
+                note={activeCoachNote}
+                onDismiss={() => setActiveCoachNote(null)}
+            />
         </div>
     )
 }

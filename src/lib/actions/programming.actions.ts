@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult, WorkoutWithSets } from '@/lib/types/training.types'
 import type { AthleteBenchmark, Microcycle, Workout } from '@/lib/types/database.types'
+import type { SessionInventory } from '@/lib/types/inventory.types'
 import { generateStructuredResponse } from '@/lib/ai/client'
 import { WeeklySessionPoolSchema, SingleSessionResponseSchema, createValidatedSessionPoolSchema, MesocycleOverviewPlanSchema } from '@/lib/ai/schemas/programming'
 import type { WeeklySessionPool, Session, LiftingSession, EnduranceSession, ConditioningSession, MobilitySession, SingleSessionResponse, MesocycleOverviewPlan } from '@/lib/ai/schemas/programming'
@@ -1391,6 +1392,50 @@ function buildCoachNotes(session: Session, transparency: string): string | null 
         }
     }
 
+    // For CARDIO sessions, build structured session prescription
+    if (session.modality === 'CARDIO') {
+        const endSession = session as EnduranceSession
+        const sessionParts: string[] = []
+
+        // Distance or duration
+        if (endSession.targetDistanceKm !== null && endSession.targetDistanceKm > 0) {
+            sessionParts.push(`${endSession.targetDistanceKm}km`)
+        } else if (endSession.estimatedDurationMinutes) {
+            sessionParts.push(`${endSession.estimatedDurationMinutes} minutes`)
+        }
+
+        // Pace
+        if (endSession.targetPaceSecPerKm !== null && endSession.targetPaceSecPerKm > 0) {
+            const paceMinutes = Math.floor(endSession.targetPaceSecPerKm / 60)
+            const paceSeconds = Math.round(endSession.targetPaceSecPerKm % 60)
+            sessionParts.push(`@ ${paceMinutes}:${paceSeconds.toString().padStart(2, '0')}/km pace`)
+        }
+
+        // Interval structure
+        if (endSession.intervalStructure) {
+            sessionParts.push(endSession.intervalStructure)
+        }
+
+        if (sessionParts.length > 0) {
+            parts.push(`SESSION:\n${sessionParts.join(' ')}`)
+        }
+
+        // Add metadata line
+        const meta: string[] = []
+        if (endSession.intensityZone) {
+            meta.push(endSession.intensityZone.replace('_', ' ').toUpperCase())
+        }
+        if (endSession.enduranceModality) {
+            meta.push(endSession.enduranceModality)
+        }
+        if (endSession.estimatedDurationMinutes) {
+            meta.push(`~${endSession.estimatedDurationMinutes} min`)
+        }
+        if (meta.length > 0) {
+            parts.push(meta.join(' · '))
+        }
+    }
+
     if (session.coachNotes) {
         parts.push(session.coachNotes)
     }
@@ -1400,12 +1445,6 @@ function buildCoachNotes(session: Session, transparency: string): string | null 
             const liftSession = session as LiftingSession
             if (liftSession.mobilityPrimer) {
                 parts.push(`Mobility primer: ${liftSession.mobilityPrimer}`)
-            }
-        }
-        if (session.modality === 'CARDIO') {
-            const endSession = session as EnduranceSession
-            if (endSession.intervalStructure) {
-                parts.push(`Interval structure: ${endSession.intervalStructure}`)
             }
         }
     }

@@ -1,4 +1,5 @@
 import { getWorkoutById } from "@/lib/actions/workout.actions"
+import { getProfile } from "@/lib/actions/onboarding.actions"
 import type { WorkoutWithSets } from "@/lib/types/training.types"
 import { AlertTriangle } from "lucide-react"
 import { WorkoutLogger } from "@/components/workout/WorkoutLogger"
@@ -6,6 +7,7 @@ import { WorkoutLogger } from "@/components/workout/WorkoutLogger"
 export default async function ActiveWorkoutPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
     const result = await getWorkoutById(id)
+    const profileResult = await getProfile()
 
     if (!result.success || !result.data) {
         return (
@@ -20,5 +22,7 @@ export default async function ActiveWorkoutPage({ params }: { params: Promise<{ 
         )
     }
 
-    return <WorkoutLogger workout={result.data as WorkoutWithSets} />
+    const displayWeightsAsPercentages = profileResult.success && profileResult.data?.display_weights_as_percentages === true
+
+    return <WorkoutLogger workout={result.data as WorkoutWithSets} displayWeightsAsPercentages={displayWeightsAsPercentages} />
 }

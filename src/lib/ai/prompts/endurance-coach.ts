@@ -129,6 +129,18 @@ CRITICAL RULES:
 8. Account for spinal load sharing: rucking + rowing share the recovery pool with deadlifts/squats.
 9. Progressive overload: increase total weekly distance/duration by ~10% per non-deload week.
 
+CRITICAL: SESSION STRUCTURE FIELDS
+You MUST populate these fields for every session:
+- targetDistanceKm: Specific distance in kilometers (e.g., 5, 8, 10). Use null ONLY for pure time-based sessions.
+- targetPaceSecPerKm: Target pace in seconds per kilometer (e.g., 330 = 5:30/km pace). Calculate from VDOT or zone targets.
+- estimatedDurationMinutes: Expected duration based on distance × pace (or specified time for time-based sessions).
+- intervalStructure: For interval sessions, specify exact structure (e.g., "8x400m @ 5K pace, 90s rest"). Use null for steady-state sessions.
+- coachNotes: Use this for coaching philosophy, focus points, and recovery guidance. Do NOT put session prescription here.
+
+EXAMPLE:
+- Easy Zone 2 Run: targetDistanceKm=5, targetPaceSecPerKm=360 (6:00/km), estimatedDurationMinutes=30, intervalStructure=null, coachNotes="Easy conversational pace..."
+- VO2max Intervals: targetDistanceKm=5, targetPaceSecPerKm=240 (4:00/km for work intervals), estimatedDurationMinutes=35, intervalStructure="6×800m @ 3:12/km pace, 2min recovery jog", coachNotes="High intensity..."
+
 RESPONSE SCHEMA:
 ${ENDURANCE_PROGRAM_SCHEMA_TEXT}
 
