@@ -58,7 +58,7 @@ export function AllocationModal({
 
         const result = await suggestAllocation(mesocycleId, weekNumber, startDate)
 
-        if (result.success && result.data) {
+        if (result.success) {
             setSuggestion(result.data)
         } else {
             setError(result.error ?? 'Failed to generate suggestions')
