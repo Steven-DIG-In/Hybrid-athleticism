@@ -76,7 +76,7 @@ export function PlannerClient({ mesocycle, initialWorkouts }: PlannerClientProps
         if (!session) return
 
         // Check for conflicts
-        const conflicts = [] // TODO: Add conflict detection logic
+        const conflicts: any[] = [] // TODO: Add conflict detection logic
 
         if (conflicts.length > 0) {
             setPendingConflicts({ sessionId, newDate: targetDate, conflicts })
