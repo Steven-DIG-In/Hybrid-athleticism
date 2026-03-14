@@ -91,7 +91,7 @@ export function ExerciseHistoryPanel({
                             )}
                         </div>
                         {hasPR && (
-                            <Trophy className="w-4 h-4 text-yellow-400" title="PR in history" />
+                            <Trophy className="w-4 h-4 text-yellow-400" />
                         )}
                     </div>
                     {isExpanded ? (
