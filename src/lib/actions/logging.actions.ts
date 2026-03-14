@@ -92,10 +92,10 @@ export async function logExerciseSet(
 // ─── Update Pre-Scaffolded Set ───────────────────────────────────────────────
 
 export interface UpdateExerciseSetInput {
-    actualReps: number
-    actualWeightKg: number
-    rirActual?: number
-    rpeActual?: number
+    actualReps: number | null
+    actualWeightKg: number | null
+    rirActual?: number | null
+    rpeActual?: number | null
     notes?: string
 }
 
