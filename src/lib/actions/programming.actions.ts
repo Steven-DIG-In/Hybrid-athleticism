@@ -1405,9 +1405,10 @@ function buildCoachNotes(session: Session, transparency: string): string | null 
         }
 
         // Pace
-        if (endSession.targetPaceSecPerKm !== null && endSession.targetPaceSecPerKm > 0) {
-            const paceMinutes = Math.floor(endSession.targetPaceSecPerKm / 60)
-            const paceSeconds = Math.round(endSession.targetPaceSecPerKm % 60)
+        if (endSession.targetPaceSecPerKm != null && endSession.targetPaceSecPerKm > 0) {
+            const pace = endSession.targetPaceSecPerKm
+            const paceMinutes = Math.floor(pace / 60)
+            const paceSeconds = Math.round(pace % 60)
             sessionParts.push(`@ ${paceMinutes}:${paceSeconds.toString().padStart(2, '0')}/km pace`)
         }
 

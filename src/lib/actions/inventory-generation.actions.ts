@@ -10,7 +10,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { ActionResult } from './types'
+import type { ActionResult } from '@/lib/types/training.types'
 import type { SessionInventory } from '@/lib/types/inventory.types'
 import { generateSessionPool } from './programming.actions'
 
@@ -69,7 +69,7 @@ export async function generateMesocycleInventory(
         // Call existing AI programming to generate sessions
         const poolResult = await generateSessionPool(microcycle.id)
 
-        if (!poolResult.success || !poolResult.data) {
+        if (!poolResult.success) {
             console.error(`[generateMesocycleInventory] Failed week ${weekNum}:`, poolResult.error)
             continue
         }

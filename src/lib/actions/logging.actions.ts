@@ -140,7 +140,7 @@ export async function updateExerciseSet(
         .maybeSingle()
 
     const isPR = prCheck
-        ? input.actualWeightKg > (prCheck.actual_weight_kg ?? 0)
+        ? (input.actualWeightKg ?? 0) > (prCheck.actual_weight_kg ?? 0)
         : true // First logged set is always a PR
 
     const { data: updatedSet, error } = await supabase
