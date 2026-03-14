@@ -78,6 +78,7 @@ const mockProfile: Profile = {
     id: 'test-user-001',
     display_name: 'Test Athlete',
     avatar_url: null,
+    display_weights_as_percentages: false,
     training_age_years: 4,
     sex: 'MALE',
     primary_goal: 'HYBRID_PEAKING',
