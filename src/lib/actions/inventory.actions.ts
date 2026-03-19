@@ -2,7 +2,8 @@
  * Session Inventory Actions
  *
  * Handles creation, allocation, and management of unscheduled training sessions.
- * Sessions are generated as inventory (no calendar dates), then allocated to calendar.
+ * Sessions are generated as inventory (week_number, no dates), then allocated
+ * to training days (1, 2, 3...) with optional two-a-day support.
  */
 
 'use server'
@@ -11,12 +12,13 @@ import { createClient } from '@/lib/supabase/server'
 import type { ActionResult } from '@/lib/types/training.types'
 import type {
     SessionInventory,
-    AllocationResult,
-    ScheduleSuggestion,
+    DayAllocation,
+    TrainingDay,
+    TrainingDaySession,
     UnscheduledInventoryView,
     InventoryGroup,
 } from '@/lib/types/inventory.types'
-import { addDays, parseISO, format, getDay } from 'date-fns'
+import type { TwoADayWillingness } from '@/lib/types/database.types'
 
 // ─── Generate Session Inventory ─────────────────────────────────────────────
 
@@ -78,13 +80,13 @@ export async function getUnscheduledInventory(
         return { success: false, error: 'Mesocycle not found' }
     }
 
-    // Get all unscheduled inventory sessions
+    // Get all unscheduled inventory sessions (training_day is NULL = unallocated)
     const { data: sessions, error: sessionsError } = await supabase
         .from('session_inventory')
         .select('*')
         .eq('mesocycle_id', mesocycleId)
         .eq('user_id', user.id)
-        .is('scheduled_date', null)
+        .is('training_day', null)
         .order('week_number', { ascending: true })
         .order('session_priority', { ascending: true })
 
@@ -133,17 +135,31 @@ export async function getUnscheduledInventory(
     }
 }
 
-// ─── Allocate Sessions to Calendar ──────────────────────────────────────────
+// ─── Allocate Sessions to Training Days ─────────────────────────────────────
+
+/** Modality priority for distribution: higher-priority modalities get placed first. */
+const MODALITY_PRIORITY: Record<string, number> = {
+    LIFTING: 1,
+    CARDIO: 2,
+    METCON: 3,
+    RUCKING: 4,
+    MOBILITY: 5,
+}
 
 /**
- * Generate allocation suggestions for a week's inventory.
- * Uses interference rules and rest day preferences to suggest optimal scheduling.
+ * Generate day-based allocation suggestions for a week's inventory.
+ *
+ * Training days are numbered 1, 2, 3... (not calendar dates).
+ * The athlete does "Day 1" whenever they are ready, then "Day 2", etc.
+ * Two sessions on the same training_day = two-a-day (slot 1 AM, slot 2 PM).
+ *
+ * Uses athlete profile (available_days, two_a_day) and interference rules
+ * to distribute sessions optimally across training days.
  */
 export async function suggestAllocation(
     mesocycleId: string,
-    weekNumber: number,
-    startDate: string  // ISO date string
-): Promise<ActionResult<ScheduleSuggestion>> {
+    weekNumber: number
+): Promise<ActionResult<DayAllocation>> {
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -151,22 +167,28 @@ export async function suggestAllocation(
         return { success: false, error: 'Not authenticated' }
     }
 
-    // Get user constraints
-    const { data: constraints } = await supabase
-        .from('training_constraints')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('mesocycle_id', mesocycleId)
-        .maybeSingle()
+    // Load athlete profile for available_days and two_a_day preference
+    const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('available_days, two_a_day')
+        .eq('id', user.id)
+        .single()
 
-    // Get unscheduled sessions for this week
+    if (profileError || !profile) {
+        return { success: false, error: 'Could not load athlete profile' }
+    }
+
+    const availableDays: number = profile.available_days ?? 4
+    const twoADay: TwoADayWillingness = (profile.two_a_day as TwoADayWillingness) ?? 'no'
+
+    // Get unallocated sessions for this week
     const { data: sessions, error: sessionsError } = await supabase
         .from('session_inventory')
         .select('*')
         .eq('mesocycle_id', mesocycleId)
         .eq('user_id', user.id)
         .eq('week_number', weekNumber)
-        .is('scheduled_date', null)
+        .is('training_day', null)
         .order('session_priority', { ascending: true })
 
     if (sessionsError) {
@@ -174,125 +196,284 @@ export async function suggestAllocation(
     }
 
     if (!sessions || sessions.length === 0) {
-        return { success: false, error: `No unscheduled sessions found for week ${weekNumber}` }
+        return { success: false, error: `No unallocated sessions found for week ${weekNumber}` }
     }
 
-    // Build allocation suggestions with intelligent load distribution
-    const suggestions: AllocationResult[] = []
+    // Sort by modality priority, then by session_priority within same modality
+    const sortedSessions = [...sessions].sort((a, b) => {
+        const modA = MODALITY_PRIORITY[a.modality] ?? 99
+        const modB = MODALITY_PRIORITY[b.modality] ?? 99
+        if (modA !== modB) return modA - modB
+        return (a.session_priority ?? 1) - (b.session_priority ?? 1)
+    }) as SessionInventory[]
+
+    // Group by modality
+    const byModality = (mod: string) => sortedSessions.filter(s => s.modality === mod)
+    const liftingSessions = byModality('LIFTING')
+    const cardioSessions = byModality('CARDIO')
+    const metconSessions = byModality('METCON')
+    const ruckingSessions = byModality('RUCKING')
+    const mobilitySessions = byModality('MOBILITY')
+
+    // Initialize training day slots
+    // Each day can hold slot 1 (primary) and optionally slot 2 (secondary)
+    const daySlots: Map<number, { slot1: SessionInventory | null; slot2: SessionInventory | null; slot1Reasoning: string; slot2Reasoning: string }> = new Map()
+    for (let d = 1; d <= availableDays; d++) {
+        daySlots.set(d, { slot1: null, slot2: null, slot1Reasoning: '', slot2Reasoning: '' })
+    }
+
     const warnings: string[] = []
+    const maxPerDay = twoADay === 'no' ? 1 : 2
 
-    const unavailableDays = constraints?.unavailable_days ?? []
-    const noHeavyLegsBeforeRun = constraints?.no_heavy_legs_before_run ?? true
-
-    // Group sessions by modality for intelligent interleaving
-    const liftingSessions = sessions.filter(s => s.modality === 'LIFTING')
-    const cardioSessions = sessions.filter(s => s.modality === 'CARDIO')
-    const otherSessions = sessions.filter(s => !['LIFTING', 'CARDIO'].includes(s.modality))
-
-    // Create interleaved schedule to spread load
-    const interleavedSessions: SessionInventory[] = []
-    const maxLength = Math.max(liftingSessions.length, cardioSessions.length, otherSessions.length)
-
-    for (let i = 0; i < maxLength; i++) {
-        // Alternate: Lifting → Other → Cardio → repeat
-        if (liftingSessions[i]) interleavedSessions.push(liftingSessions[i] as SessionInventory)
-        if (otherSessions[i]) interleavedSessions.push(otherSessions[i] as SessionInventory)
-        if (cardioSessions[i]) interleavedSessions.push(cardioSessions[i] as SessionInventory)
+    // Helper: get modality on a given day's slot 1
+    const dayHasModality = (day: number, mod: string): boolean => {
+        const slot = daySlots.get(day)
+        if (!slot) return false
+        return slot.slot1?.modality === mod || slot.slot2?.modality === mod
     }
 
-    // Schedule sessions with recovery rules
-    let currentDate = parseISO(startDate)
-    let lastLiftingDate: Date | null = null
-    let lastCardioDate: Date | null = null
+    // Helper: check if a day has any session in slot 1
+    const dayHasSlot1 = (day: number): boolean => {
+        return daySlots.get(day)?.slot1 !== null
+    }
 
-    for (const session of interleavedSessions) {
-        // Skip unavailable days
-        while (isDayUnavailable(currentDate, unavailableDays)) {
-            currentDate = addDays(currentDate, 1)
+    // Helper: check if a day has room for slot 2
+    const dayHasSlot2Room = (day: number): boolean => {
+        const slot = daySlots.get(day)
+        return slot !== null && slot !== undefined && slot.slot1 !== null && slot.slot2 === null
+    }
+
+    // Helper: place a session in slot 1 on a given day
+    const placeSlot1 = (day: number, session: SessionInventory, reasoning: string): boolean => {
+        const slot = daySlots.get(day)
+        if (!slot || slot.slot1 !== null) return false
+        slot.slot1 = session
+        slot.slot1Reasoning = reasoning
+        return true
+    }
+
+    // Helper: place a session in slot 2 on a given day (two-a-day)
+    const placeSlot2 = (day: number, session: SessionInventory, reasoning: string): boolean => {
+        if (twoADay === 'no') return false
+        const slot = daySlots.get(day)
+        if (!slot || slot.slot1 === null || slot.slot2 !== null) return false
+        slot.slot2 = session
+        slot.slot2Reasoning = reasoning
+        return true
+    }
+
+    // ── STEP 1: Spread LIFTING sessions across days with gaps ─────────────
+    if (liftingSessions.length > 0) {
+        const liftCount = liftingSessions.length
+        // Spread evenly: e.g., 3 in 5 days -> days 1, 3, 5
+        const spacing = liftCount <= availableDays
+            ? Math.floor(availableDays / liftCount)
+            : 1
+
+        let nextDay = 1
+        for (const session of liftingSessions) {
+            // Find next available slot 1 starting from nextDay
+            let placed = false
+            for (let attempt = nextDay; attempt <= availableDays; attempt++) {
+                if (!dayHasSlot1(attempt)) {
+                    placeSlot1(attempt, session, `Day ${attempt} - strength session, spaced for recovery`)
+                    nextDay = attempt + spacing
+                    placed = true
+                    break
+                }
+            }
+            // Wrap around if we ran out of days
+            if (!placed) {
+                for (let attempt = 1; attempt <= availableDays; attempt++) {
+                    if (!dayHasSlot1(attempt)) {
+                        placeSlot1(attempt, session, `Day ${attempt} - strength session (wrapped placement)`)
+                        placed = true
+                        break
+                    }
+                }
+            }
+            // If still not placed, try as slot 2 if two-a-day allowed
+            if (!placed && twoADay !== 'no') {
+                for (let attempt = 1; attempt <= availableDays; attempt++) {
+                    if (dayHasSlot2Room(attempt) && !dayHasModality(attempt, 'LIFTING')) {
+                        placeSlot2(attempt, session, `Day ${attempt} - strength as two-a-day (overflow)`)
+                        placed = true
+                        break
+                    }
+                }
+            }
+            if (!placed) {
+                warnings.push(`Could not place lifting session "${session.name}" - not enough available days`)
+            }
         }
+    }
 
-        // Enforce 48hr recovery between strength sessions
-        if (session.modality === 'LIFTING' && lastLiftingDate) {
-            const hoursSinceLastLifting = (currentDate.getTime() - lastLiftingDate.getTime()) / (1000 * 60 * 60)
-            if (hoursSinceLastLifting < 48) {
-                currentDate = addDays(lastLiftingDate, 2) // Add 2 days = 48hr minimum
-                while (isDayUnavailable(currentDate, unavailableDays)) {
-                    currentDate = addDays(currentDate, 1)
+    // ── STEP 2: Assign CARDIO to gap days first ──────────────────────────
+    const unplacedCardio: SessionInventory[] = []
+    for (const session of cardioSessions) {
+        // Prefer non-lifting days first
+        let placed = false
+        for (let d = 1; d <= availableDays; d++) {
+            if (!dayHasSlot1(d)) {
+                placeSlot1(d, session, `Day ${d} - cardio on rest day from lifting`)
+                placed = true
+                break
+            }
+        }
+        if (!placed) {
+            unplacedCardio.push(session)
+        }
+    }
+    // Place remaining cardio as slot 2 if two-a-day allowed
+    for (const session of unplacedCardio) {
+        let placed = false
+        if (twoADay !== 'no') {
+            for (let d = 1; d <= availableDays; d++) {
+                if (dayHasSlot2Room(d)) {
+                    placeSlot2(d, session, `Day ${d} - cardio paired as two-a-day`)
+                    placed = true
+                    break
                 }
             }
         }
+        if (!placed) {
+            warnings.push(`Could not place cardio session "${session.name}" - no room`)
+        }
+    }
 
-        // Enforce rest day between heavy lifting and cardio if configured
-        if (noHeavyLegsBeforeRun && session.modality === 'CARDIO' && lastLiftingDate) {
-            const daysSinceLifting = Math.floor((currentDate.getTime() - lastLiftingDate.getTime()) / (1000 * 60 * 60 * 24))
-            if (daysSinceLifting === 0) {
-                // Same day - move cardio to next day
-                currentDate = addDays(currentDate, 1)
-                while (isDayUnavailable(currentDate, unavailableDays)) {
-                    currentDate = addDays(currentDate, 1)
+    // ── STEP 3: Assign METCON + RUCKING to remaining slots ──────────────
+    const otherHighIntensity = [...metconSessions, ...ruckingSessions]
+    const unplacedOther: SessionInventory[] = []
+    for (const session of otherHighIntensity) {
+        let placed = false
+        // Fill empty days first
+        for (let d = 1; d <= availableDays; d++) {
+            if (!dayHasSlot1(d)) {
+                const label = session.modality === 'METCON' ? 'conditioning' : 'rucking'
+                placeSlot1(d, session, `Day ${d} - ${label} session`)
+                placed = true
+                break
+            }
+        }
+        if (!placed) {
+            unplacedOther.push(session)
+        }
+    }
+    // Place remaining as slot 2
+    for (const session of unplacedOther) {
+        let placed = false
+        if (twoADay !== 'no') {
+            for (let d = 1; d <= availableDays; d++) {
+                if (dayHasSlot2Room(d)) {
+                    const label = session.modality === 'METCON' ? 'conditioning' : 'rucking'
+                    placeSlot2(d, session, `Day ${d} - ${label} paired as two-a-day`)
+                    placed = true
+                    break
                 }
             }
         }
+        if (!placed) {
+            warnings.push(`Could not place ${session.modality.toLowerCase()} session "${session.name}" - no room`)
+        }
+    }
 
-        // Enforce 24hr recovery between high-intensity cardio sessions
-        if (session.modality === 'CARDIO' && lastCardioDate) {
-            const hoursSinceLastCardio = (currentDate.getTime() - lastCardioDate.getTime()) / (1000 * 60 * 60)
-            if (hoursSinceLastCardio < 24) {
-                currentDate = addDays(lastCardioDate, 1)
-                while (isDayUnavailable(currentDate, unavailableDays)) {
-                    currentDate = addDays(currentDate, 1)
+    // ── STEP 4: Assign MOBILITY as slot 2 (primer/cooldown) ─────────────
+    for (const session of mobilitySessions) {
+        let placed = false
+        // Try to pair with another session as slot 2
+        if (maxPerDay >= 2) {
+            for (let d = 1; d <= availableDays; d++) {
+                if (dayHasSlot2Room(d)) {
+                    placeSlot2(d, session, `Day ${d} - mobility as primer/cooldown`)
+                    placed = true
+                    break
                 }
             }
         }
-
-        suggestions.push({
-            session,
-            suggestedDate: format(currentDate, 'yyyy-MM-dd'),
-            reasoning: getAllocationReasoning(session, currentDate, lastLiftingDate, lastCardioDate, unavailableDays)
-        })
-
-        // Track last session dates by modality
-        if (session.modality === 'LIFTING') lastLiftingDate = new Date(currentDate)
-        if (session.modality === 'CARDIO') lastCardioDate = new Date(currentDate)
-
-        currentDate = addDays(currentDate, 1)
+        // If no room as slot 2, give its own day
+        if (!placed) {
+            for (let d = 1; d <= availableDays; d++) {
+                if (!dayHasSlot1(d)) {
+                    placeSlot1(d, session, `Day ${d} - dedicated mobility session`)
+                    placed = true
+                    break
+                }
+            }
+        }
+        if (!placed) {
+            warnings.push(`Could not place mobility session "${session.name}" - no room`)
+        }
     }
 
-    // Generate warnings
-    if (suggestions.length > 6) {
-        warnings.push('More than 6 sessions per week - consider high training load')
-    }
-
-    // Check for consecutive heavy days
-    let consecutiveHeavyDays = 0
-    for (let i = 0; i < suggestions.length; i++) {
-        const session = suggestions[i].session
-        if (session.modality === 'LIFTING' || session.modality === 'METCON') {
-            consecutiveHeavyDays++
-            if (consecutiveHeavyDays >= 3) {
-                warnings.push('3+ consecutive high-intensity days detected - consider adding rest')
+    // ── STEP 5: Check interference rules and generate warnings ──────────
+    let consecutiveLiftingDays = 0
+    for (let d = 1; d <= availableDays; d++) {
+        if (dayHasModality(d, 'LIFTING')) {
+            consecutiveLiftingDays++
+            if (consecutiveLiftingDays >= 3) {
+                warnings.push(`3+ consecutive training days with lifting (days ${d - 2}-${d}) - consider rearranging`)
             }
         } else {
-            consecutiveHeavyDays = 0
+            consecutiveLiftingDays = 0
+        }
+
+        // Check two LIFTING on same day
+        const slot = daySlots.get(d)
+        if (slot?.slot1?.modality === 'LIFTING' && slot?.slot2?.modality === 'LIFTING') {
+            warnings.push(`Day ${d} has two lifting sessions - high CNS demand`)
+        }
+    }
+
+    // Check capacity overflow
+    const totalCapacity = availableDays * maxPerDay
+    if (sortedSessions.length > totalCapacity) {
+        const overflow = sortedSessions.length - totalCapacity
+        warnings.push(`${overflow} session(s) could not be placed - consider increasing available days or enabling two-a-days`)
+    }
+
+    // Total load warning
+    const totalSessions = sortedSessions.length
+    if (totalSessions > 6) {
+        warnings.push(`${totalSessions} sessions this week - high training volume`)
+    }
+
+    // ── Build result ────────────────────────────────────────────────────
+    const days: TrainingDay[] = []
+    for (let d = 1; d <= availableDays; d++) {
+        const slot = daySlots.get(d)!
+        const daySessions: TrainingDaySession[] = []
+
+        if (slot.slot1) {
+            daySessions.push({ session: slot.slot1, slot: 1, reasoning: slot.slot1Reasoning })
+        }
+        if (slot.slot2) {
+            daySessions.push({ session: slot.slot2, slot: 2, reasoning: slot.slot2Reasoning })
+        }
+
+        if (daySessions.length > 0) {
+            days.push({ dayNumber: d, sessions: daySessions })
         }
     }
 
     return {
         success: true,
         data: {
-            allocations: suggestions,
-            warnings
+            days,
+            warnings,
+            totalTrainingDays: days.length,
         }
     }
 }
 
 /**
- * Apply allocation suggestions: update session_inventory with scheduled_date
+ * Apply day-based allocation: update session_inventory with training_day + session_slot
  * AND create corresponding workout entries for the workout logger.
  * Also creates a check_in_windows record to drive the weekly coaching review cycle.
+ *
+ * scheduled_date stays NULL — we are day-based, not calendar-based.
  */
 export async function applyAllocation(
-    suggestion: ScheduleSuggestion
+    allocation: DayAllocation
 ): Promise<ActionResult<{ allocated: number }>> {
     const supabase = await createClient()
 
@@ -302,92 +483,98 @@ export async function applyAllocation(
     }
 
     let allocated = 0
+    let firstSession: SessionInventory | null = null
 
-    for (const allocation of suggestion.allocations) {
-        const session = allocation.session
+    for (const day of allocation.days) {
+        for (const entry of day.sessions) {
+            const session = entry.session
+            if (!firstSession) firstSession = session
 
-        // 1. Update session_inventory with scheduled_date
-        const { error: updateError } = await supabase
-            .from('session_inventory')
-            .update({ scheduled_date: allocation.suggestedDate })
-            .eq('id', session.id)
-            .eq('user_id', user.id)
+            // 1. Update session_inventory with training_day + session_slot
+            const { error: updateError } = await supabase
+                .from('session_inventory')
+                .update({
+                    training_day: day.dayNumber,
+                    session_slot: entry.slot,
+                })
+                .eq('id', session.id)
+                .eq('user_id', user.id)
 
-        if (updateError) {
-            console.error(`Failed to schedule session ${session.id}:`, updateError)
-            continue
-        }
+            if (updateError) {
+                console.error(`Failed to allocate session ${session.id}:`, updateError)
+                continue
+            }
 
-        // 2. Find microcycle for this scheduled date
-        const { data: microcycle } = await supabase
-            .from('microcycles')
-            .select('id')
-            .eq('mesocycle_id', session.mesocycle_id)
-            .eq('week_number', session.week_number)
-            .eq('user_id', user.id)
-            .maybeSingle()
+            // 2. Find microcycle for this week
+            const { data: microcycle } = await supabase
+                .from('microcycles')
+                .select('id')
+                .eq('mesocycle_id', session.mesocycle_id)
+                .eq('week_number', session.week_number)
+                .eq('user_id', user.id)
+                .maybeSingle()
 
-        if (!microcycle) {
-            console.error(`No microcycle found for week ${session.week_number}`)
-            continue
-        }
+            if (!microcycle) {
+                console.error(`No microcycle found for week ${session.week_number}`)
+                continue
+            }
 
-        // 3. Create workout entry for the workout logger
-        const { data: workout, error: workoutError } = await supabase
-            .from('workouts')
-            .insert({
-                user_id: user.id,
-                microcycle_id: microcycle.id,
-                modality: session.modality,
-                name: session.name,
-                coach_notes: session.coach_notes,
-                scheduled_date: allocation.suggestedDate,
-                is_completed: false,
-                is_allocated: true,
-                session_inventory_id: session.id, // Link back to inventory
-            })
-            .select('id')
-            .single()
+            // 3. Create workout entry for the workout logger
+            // scheduled_date is set to a synthetic date for ordering purposes
+            // (today + dayNumber offset), but the real scheduling is training_day-based
+            const { data: workout, error: workoutError } = await supabase
+                .from('workouts')
+                .insert({
+                    user_id: user.id,
+                    microcycle_id: microcycle.id,
+                    modality: session.modality,
+                    name: session.name,
+                    coach_notes: session.coach_notes,
+                    scheduled_date: new Date().toISOString().split('T')[0], // placeholder
+                    is_completed: false,
+                    is_allocated: true,
+                    session_inventory_id: session.id,
+                })
+                .select('id')
+                .single()
 
-        if (workoutError || !workout) {
-            console.error(`Failed to create workout for session ${session.id}:`, workoutError)
-            continue
-        }
+            if (workoutError || !workout) {
+                console.error(`Failed to create workout for session ${session.id}:`, workoutError)
+                continue
+            }
 
-        // 4. Create exercise_sets if LIFTING modality
-        if (session.modality === 'LIFTING' && session.adjustment_pending) {
-            const prescription = (session.adjustment_pending as any).prescription
-            if (prescription && Array.isArray(prescription)) {
-                let setNumber = 1
-                for (const exercise of prescription) {
-                    for (const set of exercise.sets) {
-                        await supabase.from('exercise_sets').insert({
-                            user_id: user.id,
-                            workout_id: workout.id,
-                            exercise_name: exercise.name,
-                            muscle_group: exercise.muscleGroup,
-                            set_number: setNumber++,
-                            target_reps: set.targetReps,
-                            target_weight_kg: set.targetWeightKg,
-                            target_rir: set.targetRir,
-                            notes: set.notes,
-                        })
+            // 4. Create exercise_sets if LIFTING modality
+            if (session.modality === 'LIFTING' && session.adjustment_pending) {
+                const prescription = (session.adjustment_pending as unknown as Record<string, unknown>)?.prescription
+                if (prescription && Array.isArray(prescription)) {
+                    let setNumber = 1
+                    for (const exercise of prescription) {
+                        for (const set of exercise.sets) {
+                            await supabase.from('exercise_sets').insert({
+                                user_id: user.id,
+                                workout_id: workout.id,
+                                exercise_name: exercise.name,
+                                muscle_group: exercise.muscleGroup,
+                                set_number: setNumber++,
+                                target_reps: set.targetReps,
+                                target_weight_kg: set.targetWeightKg,
+                                target_rir: set.targetRir,
+                                notes: set.notes,
+                            })
+                        }
                     }
                 }
             }
-        }
 
-        allocated++
+            allocated++
+        }
     }
 
     // Create a check_in_windows record for this week if any sessions were allocated.
-    // Determines the mesocycle_id and week_number from the first allocation in the batch.
-    if (allocated > 0 && suggestion.allocations.length > 0) {
-        const firstAllocation = suggestion.allocations[0]
-        const firstSession = firstAllocation.session
+    if (allocated > 0 && firstSession) {
         const mesocycleId = firstSession.mesocycle_id
         const weekNumber = firstSession.week_number
-        const allocationStart = firstAllocation.suggestedDate
+        const allocationStart = new Date().toISOString().split('T')[0] // today = reference point for 7-day safety net
 
         // Check for an existing window to avoid duplicate records on re-allocation
         const { data: existingWindow } = await supabase
@@ -411,11 +598,9 @@ export async function applyAllocation(
                 })
 
             if (windowError) {
-                // Non-fatal: allocation succeeded; log the window creation failure
                 console.error('[applyAllocation] Failed to create check_in_windows record:', windowError)
             }
         } else {
-            // Window already exists — update total_allocated to reflect new count
             await supabase
                 .from('check_in_windows')
                 .update({ total_allocated: allocated })
@@ -430,11 +615,12 @@ export async function applyAllocation(
 }
 
 /**
- * Manually schedule a session to a specific date.
+ * Manually assign a session to a specific training day and slot.
  */
 export async function scheduleSession(
     sessionId: string,
-    scheduledDate: string
+    trainingDay: number,
+    sessionSlot: 1 | 2 = 1
 ): Promise<ActionResult<void>> {
     const supabase = await createClient()
 
@@ -445,7 +631,7 @@ export async function scheduleSession(
 
     const { error } = await supabase
         .from('session_inventory')
-        .update({ scheduled_date: scheduledDate })
+        .update({ training_day: trainingDay, session_slot: sessionSlot })
         .eq('id', sessionId)
         .eq('user_id', user.id)
 
@@ -457,7 +643,7 @@ export async function scheduleSession(
 }
 
 /**
- * Unschedule a session (remove from calendar, back to inventory).
+ * Unschedule a session (remove from training day, back to inventory).
  */
 export async function unscheduleSession(
     sessionId: string
@@ -471,7 +657,7 @@ export async function unscheduleSession(
 
     const { error } = await supabase
         .from('session_inventory')
-        .update({ scheduled_date: null })
+        .update({ training_day: null, session_slot: null, scheduled_date: null })
         .eq('id', sessionId)
         .eq('user_id', user.id)
 
@@ -497,14 +683,14 @@ export async function deallocateWeek(
         return { success: false, error: 'Not authenticated' }
     }
 
-    // Get all scheduled sessions for this week
+    // Get all allocated sessions for this week (training_day-based or scheduled_date-based)
     const { data: sessions } = await supabase
         .from('session_inventory')
         .select('id')
         .eq('mesocycle_id', mesocycleId)
         .eq('user_id', user.id)
         .eq('week_number', weekNumber)
-        .not('scheduled_date', 'is', null)
+        .not('training_day', 'is', null)
 
     if (!sessions || sessions.length === 0) {
         return { success: true, data: { deallocated: 0 } }
@@ -518,10 +704,10 @@ export async function deallocateWeek(
         .delete()
         .in('session_inventory_id', sessionIds)
 
-    // Clear scheduled dates
+    // Clear training_day, session_slot, and scheduled_date
     const { error: updateError } = await supabase
         .from('session_inventory')
-        .update({ scheduled_date: null })
+        .update({ training_day: null, session_slot: null, scheduled_date: null })
         .in('id', sessionIds)
 
     if (updateError) {
@@ -531,51 +717,3 @@ export async function deallocateWeek(
     return { success: true, data: { deallocated: sessionIds.length } }
 }
 
-// ─── Helper Functions ────────────────────────────────────────────────────────
-
-function isDayUnavailable(date: Date, unavailableDays: string[]): boolean {
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    const dayOfWeek = dayNames[getDay(date)]
-    return unavailableDays.includes(dayOfWeek)
-}
-
-function getAllocationReasoning(
-    session: SessionInventory,
-    currentDate: Date,
-    lastLiftingDate: Date | null,
-    lastCardioDate: Date | null,
-    unavailableDays: string[]
-): string {
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    const dayName = dayNames[getDay(currentDate)]
-
-    // Strength session reasoning
-    if (session.modality === 'LIFTING') {
-        if (!lastLiftingDate) {
-            return `${dayName} - first strength session of the week`
-        }
-        const daysSinceLast = Math.floor((currentDate.getTime() - lastLiftingDate.getTime()) / (1000 * 60 * 60 * 24))
-        return `${dayName} - ${daysSinceLast} days recovery since last strength session`
-    }
-
-    // Cardio session reasoning
-    if (session.modality === 'CARDIO') {
-        if (lastLiftingDate) {
-            const daysSinceLifting = Math.floor((currentDate.getTime() - lastLiftingDate.getTime()) / (1000 * 60 * 60 * 24))
-            if (daysSinceLifting === 1) {
-                return `${dayName} - rest day after strength, optimal for cardio`
-            }
-        }
-        if (!lastCardioDate) {
-            return `${dayName} - first cardio session of the week`
-        }
-        return `${dayName} - optimal spacing for endurance work`
-    }
-
-    // Other modalities
-    if (unavailableDays.length > 0) {
-        return `${dayName} - available day (avoiding ${unavailableDays.join(', ')})`
-    }
-
-    return `${dayName} - optimal spacing`
-}

@@ -13,6 +13,7 @@ import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types/training.types'
 import type { SessionInventory } from '@/lib/types/inventory.types'
 import { generateSessionPool } from './programming.actions'
+import { suggestAllocation, applyAllocation } from './inventory.actions'
 
 /**
  * Generate unscheduled session inventory for an entire mesocycle.
@@ -146,6 +147,23 @@ export async function generateMesocycleInventory(
         }
 
         console.log(`[generateMesocycleInventory] Week ${weekNum}: Created ${workouts.length} inventory sessions`)
+    }
+
+    // Auto-allocate Week 1 so the athlete can start training immediately
+    try {
+        const allocationResult = await suggestAllocation(mesocycleId, 1)
+        if (allocationResult.success && allocationResult.data) {
+            const applyResult = await applyAllocation(allocationResult.data)
+            if (applyResult.success) {
+                console.log(`[generateMesocycleInventory] Auto-allocated Week 1: ${applyResult.data.allocated} sessions`)
+            } else {
+                console.warn('[generateMesocycleInventory] Failed to apply Week 1 allocation:', applyResult.error)
+            }
+        } else {
+            console.warn('[generateMesocycleInventory] Failed to suggest Week 1 allocation:', allocationResult.success ? 'no data' : allocationResult.error)
+        }
+    } catch (err) {
+        console.warn('[generateMesocycleInventory] Week 1 auto-allocation error (non-blocking):', err)
     }
 
     revalidatePath('/dashboard')
