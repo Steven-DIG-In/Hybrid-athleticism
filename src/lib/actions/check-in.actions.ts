@@ -65,13 +65,14 @@ export async function checkAndTriggerCheckIn(
         return { triggered: false, reason: `Check-in already in status: ${window.status}` }
     }
 
-    // Count completed sessions for this week
+    // Count completed sessions for this week (only those that were allocated to a training day)
     const { count: completedCount, error: countError } = await supabase
         .from('session_inventory')
         .select('id', { count: 'exact', head: true })
         .eq('mesocycle_id', mesocycleId)
         .eq('user_id', userId)
         .eq('week_number', weekNumber)
+        .not('training_day', 'is', null)
         .not('completed_at', 'is', null)
 
     if (countError) {

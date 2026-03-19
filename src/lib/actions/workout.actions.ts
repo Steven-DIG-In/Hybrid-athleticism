@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult, TodayViewData, DashboardData, WorkoutWithSets } from '@/lib/types/training.types'
+import type { SessionInventory } from '@/lib/types/inventory.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
 
@@ -404,6 +405,38 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
         }
     }
 
+    // Fetch allocated sessions for current week (training-day based)
+    let trainingDays: DashboardData['trainingDays'] = []
+    if (currentMesocycle && currentWeek) {
+        const currentWeekNumber = (currentWeek as { week_number: number }).week_number
+        const { data: inventorySessions } = await supabase
+            .from('session_inventory')
+            .select('*')
+            .eq('mesocycle_id', currentMesocycle.id)
+            .eq('week_number', currentWeekNumber)
+            .not('training_day', 'is', null)
+            .order('training_day', { ascending: true })
+            .order('session_slot', { ascending: true })
+
+        if (inventorySessions && inventorySessions.length > 0) {
+            // Group by training_day
+            const dayMap = new Map<number, SessionInventory[]>()
+            for (const session of inventorySessions) {
+                const day = session.training_day as number
+                if (!dayMap.has(day)) dayMap.set(day, [])
+                dayMap.get(day)!.push(session as SessionInventory)
+            }
+
+            trainingDays = Array.from(dayMap.entries())
+                .sort(([a], [b]) => a - b)
+                .map(([dayNumber, sessions]) => ({
+                    dayNumber,
+                    sessions,
+                    isComplete: sessions.every(s => s.completed_at !== null),
+                }))
+        }
+    }
+
     const completedCount = sessionPool.filter(w => w.is_completed).length
     const totalCount = sessionPool.length
 
@@ -452,6 +485,7 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             previousWeekIsDeload,
             mesocycleStartDate,
             mesocycleEndDate,
+            trainingDays,
         },
     }
 }
