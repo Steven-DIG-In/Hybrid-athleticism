@@ -31,7 +31,9 @@ export interface SessionInventory {
     load_budget: number | null
 
     // Scheduling state
-    scheduled_date: string | null  // ISO date string
+    scheduled_date: string | null  // ISO date string (legacy, stays NULL in day-based allocation)
+    training_day: number | null    // Logical training day within the week (1, 2, 3...)
+    session_slot: number | null    // 1 = primary (AM), 2 = secondary (PM two-a-day)
     completed_at: string | null    // ISO timestamp
     is_approved: boolean
 
@@ -136,7 +138,26 @@ export interface CoachingAdjustment {
     resolved_at: string | null
 }
 
-// ─── Helper Types for Allocation ────────────────────────────────────────────
+// ─── Helper Types for Day-Based Allocation ─────────────────────────────────
+
+export interface DayAllocation {
+    days: TrainingDay[]
+    warnings: string[]
+    totalTrainingDays: number
+}
+
+export interface TrainingDay {
+    dayNumber: number  // 1, 2, 3...
+    sessions: TrainingDaySession[]
+}
+
+export interface TrainingDaySession {
+    session: SessionInventory
+    slot: 1 | 2  // 1 = primary, 2 = secondary (two-a-day)
+    reasoning: string
+}
+
+// ─── Legacy Types (kept for backward compatibility) ─────────────────────────
 
 export interface AllocationRequest {
     mesocycleId: string

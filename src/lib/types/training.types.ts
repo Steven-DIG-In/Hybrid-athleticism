@@ -10,6 +10,7 @@ import type {
     TimeOfDayPreference, MethodologyPreference, TransparencyPreference,
     BodyCompGoal, InjuryBodyArea, InjurySeverity, EquipmentUsageIntent,
 } from './database.types'
+import type { SessionInventory } from './inventory.types'
 
 // ─── Onboarding payload ───────────────────────────────────────────────────────
 
@@ -131,6 +132,11 @@ export interface DashboardData {
     previousWeekIsDeload: boolean
     mesocycleStartDate: string | null
     mesocycleEndDate: string | null
+    trainingDays: Array<{
+        dayNumber: number
+        sessions: SessionInventory[]
+        isComplete: boolean  // all sessions in this day have completed_at
+    }>
 }
 
 // ─── Volume tracking ──────────────────────────────────────────────────────────
