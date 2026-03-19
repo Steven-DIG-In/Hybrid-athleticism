@@ -37,6 +37,7 @@ import { MesocyclePlanView } from './MesocyclePlanView'
 import { UnscheduledInventory } from './UnscheduledInventory'
 import { AllocationModal } from './AllocationModal'
 import { CurrentWeekSessions } from './CurrentWeekSessions'
+import { TrainingDayList } from './TrainingDayList'
 import type { DashboardData, WorkoutWithSets, DayLoadSummary } from '@/lib/types/training.types'
 import type { UnscheduledInventoryView } from '@/lib/types/inventory.types'
 import { getUnscheduledInventory } from '@/lib/actions/inventory.actions'
@@ -524,7 +525,18 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
     }
 
     // ─── Session Inventory Sidebar Content ───────────────────────────────────────
-    const poolContent = (
+    // If training days are allocated, show the day-based view; otherwise fall back
+    // to the legacy unscheduled inventory view.
+    const hasTrainingDays = data.trainingDays && data.trainingDays.length > 0
+
+    const poolContent = hasTrainingDays ? (
+        <TrainingDayList
+            trainingDays={data.trainingDays}
+            sessionPool={sessionPool}
+            mesocycleId={currentMesocycle?.id}
+            weekNumber={currentWeek?.week_number}
+        />
+    ) : (
         <div className="space-y-2">
             <div className="flex justify-between items-end px-1 mb-1">
                 <h2 className="text-lg font-space-grotesk font-bold tracking-tight text-white uppercase">Session Inventory</h2>
@@ -559,7 +571,6 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                     </Button>
                 </div>
             )}
-
         </div>
     )
 
