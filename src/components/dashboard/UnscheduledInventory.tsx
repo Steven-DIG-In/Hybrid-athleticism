@@ -88,12 +88,12 @@ export function UnscheduledInventory({
                                 >
                                     <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
                                         <span className="text-xs font-space-grotesk font-bold text-cyan-400">
-                                            W{weekGroup.weekNumber}
+                                            B{weekGroup.weekNumber}
                                         </span>
                                     </div>
                                     <div className="text-left">
                                         <h3 className="text-sm font-space-grotesk font-bold text-white">
-                                            Week {weekGroup.weekNumber}
+                                            Block {weekGroup.weekNumber}
                                         </h3>
                                         <div className="flex items-center gap-3 mt-0.5">
                                             <span className="text-[10px] font-mono text-neutral-500">
@@ -118,7 +118,7 @@ export function UnscheduledInventory({
                                             onClick={() => onAllocateWeek(weekGroup.weekNumber)}
                                             className="px-3 py-1.5 bg-cyan-500 text-black text-xs font-space-grotesk font-bold rounded hover:bg-cyan-400 transition-colors"
                                         >
-                                            Allocate Week
+                                            Allocate Block
                                         </button>
                                     )}
                                     <button
@@ -147,13 +147,13 @@ export function UnscheduledInventory({
                                             />
                                         ))}
 
-                                        {/* Allocate Week Button */}
+                                        {/* Allocate Block Button */}
                                         <button
                                             onClick={() => onAllocateWeek(weekGroup.weekNumber)}
                                             className="w-full mt-3 px-4 py-3 bg-cyan-500 text-black text-sm font-space-grotesk font-bold rounded hover:bg-cyan-400 transition-colors flex items-center justify-center gap-2"
                                         >
                                             <Calendar className="w-4 h-4" />
-                                            Allocate All Sessions to Calendar
+                                            Allocate Block to Training Days
                                         </button>
                                     </div>
                                 </div>

@@ -84,7 +84,7 @@ export function AllocationModal({
                 <div className="p-6 border-b border-[#222222] flex items-center justify-between">
                     <div>
                         <h2 className="text-xl font-space-grotesk font-bold text-white">
-                            Allocate Week {weekNumber}
+                            Allocate Block {weekNumber}
                         </h2>
                         <p className="text-sm text-neutral-400 mt-1">
                             Sessions are assigned to training days - do them whenever you are ready

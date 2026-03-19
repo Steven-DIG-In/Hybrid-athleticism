@@ -544,7 +544,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                 <div className="space-y-2">
                     <div className="flex justify-between items-end px-1 mb-1">
                         <h2 className="text-lg font-space-grotesk font-bold tracking-tight text-white uppercase">
-                            Upcoming Weeks
+                            Upcoming Blocks
                         </h2>
                         <span className="text-[10px] font-mono text-neutral-600">
                             {inventory.totalSessions} sessions unallocated
@@ -619,7 +619,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                     className="text-cyan-400 border-cyan-500/30 hover:bg-cyan-950/20 hover:border-cyan-500/50"
                 >
                     <Calendar className="w-3 h-3 mr-1.5" />
-                    Open Full Calendar Planner
+                    Open Block Planner
                 </Button>
             </div>
         </div>
@@ -698,7 +698,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                 <div className="px-4 py-3 flex-1 flex flex-col justify-center">
                     <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest mb-0.5">Phase</span>
                     <span className="text-sm font-space-grotesk text-white">
-                        Week {currentWeek?.week_number ?? '—'}
+                        Block {currentWeek?.week_number ?? '—'}
                         <span className="text-neutral-500"> / {currentMesocycle?.week_count ?? '—'}</span>
                     </span>
                 </div>
@@ -740,7 +740,7 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                 <div className="border border-amber-500/30 bg-amber-950/10 p-3 flex items-center gap-3">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                     <div>
-                        <span className="text-xs font-space-grotesk text-amber-200 font-bold uppercase">Deload Week</span>
+                        <span className="text-xs font-space-grotesk text-amber-200 font-bold uppercase">Deload Block</span>
                         <p className="text-[10px] text-neutral-400 font-inter">Reduced volume and intensity for recovery. Trust the process.</p>
                     </div>
                 </div>

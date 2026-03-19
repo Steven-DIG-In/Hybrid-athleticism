@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PlannerClient } from '@/components/planner/PlannerClient'
-import type { WorkoutWithSets } from '@/lib/types/training.types'
+import type { SessionInventory } from '@/lib/types/inventory.types'
 
 export default async function PlannerPage() {
     const supabase = await createClient()
@@ -25,33 +25,32 @@ export default async function PlannerPage() {
         redirect('/dashboard')
     }
 
-    // Get all workouts for the mesocycle
-    const { data: microcycles } = await supabase
-        .from('microcycles')
-        .select('id')
+    // Fetch all session_inventory for the mesocycle (both allocated and unallocated)
+    const { data: allSessions } = await supabase
+        .from('session_inventory')
+        .select('*')
         .eq('mesocycle_id', mesocycle.id)
         .eq('user_id', user.id)
+        .order('week_number', { ascending: true })
+        .order('training_day', { ascending: true, nullsFirst: false })
+        .order('session_slot', { ascending: true })
 
-    const microcycleIds = microcycles?.map(m => m.id) ?? []
+    const sessions = (allSessions ?? []) as SessionInventory[]
 
-    let allWorkouts: WorkoutWithSets[] = []
-    if (microcycleIds.length > 0) {
-        const { data: workouts } = await supabase
-            .from('workouts')
-            .select(`
-                *,
-                exercise_sets (*)
-            `)
-            .in('microcycle_id', microcycleIds)
-            .order('scheduled_date', { ascending: true })
-
-        allWorkouts = (workouts ?? []) as WorkoutWithSets[]
-    }
+    // Determine total blocks: use mesocycle.week_count if available,
+    // otherwise derive from the highest week_number in inventory
+    const maxWeekFromSessions = sessions.reduce((max, s) => Math.max(max, s.week_number), 0)
+    const totalBlocks: number = mesocycle.week_count ?? (maxWeekFromSessions > 0 ? maxWeekFromSessions : 6)
 
     return (
         <PlannerClient
-            mesocycle={mesocycle}
-            initialWorkouts={allWorkouts}
+            mesocycle={{
+                id: mesocycle.id,
+                name: mesocycle.name,
+                week_count: mesocycle.week_count,
+            }}
+            allSessions={sessions}
+            totalBlocks={totalBlocks}
         />
     )
 }

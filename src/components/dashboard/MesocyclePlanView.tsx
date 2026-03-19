@@ -143,7 +143,7 @@ export function MesocyclePlanView({ mesocycle, currentWeekNumber }: MesocyclePla
                             {weeks.length > 0 && (
                                 <div>
                                     <p className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest mb-2">
-                                        Weekly Progression
+                                        Block Progression
                                     </p>
                                     <div className="space-y-1">
                                         {weeks.map((week) => {
@@ -163,7 +163,7 @@ export function MesocyclePlanView({ mesocycle, currentWeekNumber }: MesocyclePla
                                                     <span className={`text-[10px] font-mono w-8 ${
                                                         isCurrent ? 'text-cyan-400 font-bold' : 'text-neutral-500'
                                                     }`}>
-                                                        W{week.weekNumber}
+                                                        B{week.weekNumber}
                                                     </span>
 
                                                     {/* Volume bar */}
@@ -215,7 +215,7 @@ export function MesocyclePlanView({ mesocycle, currentWeekNumber }: MesocyclePla
                                                     {COACH_LABELS[alloc.coach] ?? alloc.coach}
                                                 </span>
                                                 <span className="text-[9px] font-mono text-neutral-500 ml-auto">
-                                                    {alloc.sessionsPerWeek}x/wk
+                                                    {alloc.sessionsPerWeek}x/blk
                                                 </span>
                                             </div>
                                         ))}
@@ -247,7 +247,7 @@ export function MesocyclePlanView({ mesocycle, currentWeekNumber }: MesocyclePla
                                 <div className="flex items-start gap-2">
                                     <Shield className="w-3 h-3 text-amber-400 mt-0.5 shrink-0" />
                                     <p className="text-[11px] font-inter text-neutral-500">
-                                        {plan.deloadTiming ?? `Deload programmed for week ${plan.deloadWeek}`}
+                                        {plan.deloadTiming ?? `Deload programmed for block ${plan.deloadWeek}`}
                                     </p>
                                 </div>
                             )}
