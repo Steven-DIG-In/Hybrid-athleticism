@@ -39,7 +39,7 @@ interface Output {
 const outputSchema = z.object({
   score: z.number().min(0).max(1),
   status: z.enum(['GREEN', 'YELLOW', 'RED']),
-  signals: z.record(z.number()),
+  signals: z.record(z.string(), z.number()),
 })
 
 function clamp(value: number, min: number, max: number): number {
