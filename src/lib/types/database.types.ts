@@ -255,6 +255,7 @@ export interface Workout {
     completed_at: string | null
     actual_duration_minutes: number | null
     coach_notes: string | null
+    session_inventory_id: string | null   // Added by migration 010
     created_at: string
     updated_at: string
 }

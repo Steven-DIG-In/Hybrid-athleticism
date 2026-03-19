@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult, TodayViewData, DashboardData, WorkoutWithSets } from '@/lib/types/training.types'
 import type { Workout } from '@/lib/types/database.types'
+import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
 
 /**
  * Get today's scheduled workout with all its sets/exercises.
@@ -169,6 +170,15 @@ export async function completeWorkout(
             console.error('[completeWorkout] conditioning log error:', condError)
             // Don't fail the whole completion — workout is already marked done
         }
+    }
+
+    // Generate performance deltas non-blocking — only applies to sessions
+    // that were created from inventory (i.e., have a session_inventory_id).
+    // Failure here must never surface to the athlete completing a workout.
+    if (workout.session_inventory_id) {
+        generatePerformanceDeltas(workout.session_inventory_id, user.id).catch((err) => {
+            console.error('[completeWorkout] performance delta generation failed:', err)
+        })
     }
 
     revalidatePath('/dashboard')
