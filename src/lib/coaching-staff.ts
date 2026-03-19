@@ -154,3 +154,8 @@ export function getDefaultTeamForGoal(goalArchetype: string): string[] {
             return ['strength', 'endurance', 'conditioning']
     }
 }
+
+// ─── Bridge to new coach config system ────────────────────────────────────────
+
+export { coachRegistry } from './coaches'
+export type { CoachConfig } from './coaches/types'

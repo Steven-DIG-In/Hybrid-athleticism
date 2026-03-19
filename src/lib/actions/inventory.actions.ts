@@ -289,6 +289,7 @@ export async function suggestAllocation(
 /**
  * Apply allocation suggestions: update session_inventory with scheduled_date
  * AND create corresponding workout entries for the workout logger.
+ * Also creates a check_in_windows record to drive the weekly coaching review cycle.
  */
 export async function applyAllocation(
     suggestion: ScheduleSuggestion
@@ -377,6 +378,49 @@ export async function applyAllocation(
         }
 
         allocated++
+    }
+
+    // Create a check_in_windows record for this week if any sessions were allocated.
+    // Determines the mesocycle_id and week_number from the first allocation in the batch.
+    if (allocated > 0 && suggestion.allocations.length > 0) {
+        const firstAllocation = suggestion.allocations[0]
+        const firstSession = firstAllocation.session
+        const mesocycleId = firstSession.mesocycle_id
+        const weekNumber = firstSession.week_number
+        const allocationStart = firstAllocation.suggestedDate
+
+        // Check for an existing window to avoid duplicate records on re-allocation
+        const { data: existingWindow } = await supabase
+            .from('check_in_windows')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('mesocycle_id', mesocycleId)
+            .eq('week_number', weekNumber)
+            .maybeSingle()
+
+        if (!existingWindow) {
+            const { error: windowError } = await supabase
+                .from('check_in_windows')
+                .insert({
+                    user_id: user.id,
+                    mesocycle_id: mesocycleId,
+                    week_number: weekNumber,
+                    allocation_start: allocationStart,
+                    total_allocated: allocated,
+                    status: 'open',
+                })
+
+            if (windowError) {
+                // Non-fatal: allocation succeeded; log the window creation failure
+                console.error('[applyAllocation] Failed to create check_in_windows record:', windowError)
+            }
+        } else {
+            // Window already exists — update total_allocated to reflect new count
+            await supabase
+                .from('check_in_windows')
+                .update({ total_allocated: allocated })
+                .eq('id', existingWindow.id)
+        }
     }
 
     return {
