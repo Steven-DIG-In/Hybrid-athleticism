@@ -530,12 +530,34 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
     const hasTrainingDays = data.trainingDays && data.trainingDays.length > 0
 
     const poolContent = hasTrainingDays ? (
-        <TrainingDayList
-            trainingDays={data.trainingDays}
-            sessionPool={sessionPool}
-            mesocycleId={currentMesocycle?.id}
-            weekNumber={currentWeek?.week_number}
-        />
+        <div className="space-y-8">
+            {/* Current week: allocated training days */}
+            <TrainingDayList
+                trainingDays={data.trainingDays}
+                sessionPool={sessionPool}
+                mesocycleId={currentMesocycle?.id}
+                weekNumber={currentWeek?.week_number}
+            />
+
+            {/* Upcoming weeks: unallocated inventory */}
+            {inventory && Object.keys(inventory.weekGroups).length > 0 && (
+                <div className="space-y-2">
+                    <div className="flex justify-between items-end px-1 mb-1">
+                        <h2 className="text-lg font-space-grotesk font-bold tracking-tight text-white uppercase">
+                            Upcoming Weeks
+                        </h2>
+                        <span className="text-[10px] font-mono text-neutral-600">
+                            {inventory.totalSessions} sessions unallocated
+                        </span>
+                    </div>
+                    <UnscheduledInventory
+                        inventory={inventory}
+                        onAllocateWeek={handleAllocateWeek}
+                        onScheduleSession={handleScheduleSession}
+                    />
+                </div>
+            )}
+        </div>
     ) : (
         <div className="space-y-2">
             <div className="flex justify-between items-end px-1 mb-1">
