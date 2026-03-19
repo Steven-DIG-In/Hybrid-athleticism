@@ -520,8 +520,19 @@ export async function applyAllocation(
             }
 
             // 3. Create workout entry for the workout logger
-            // scheduled_date is set to a synthetic date for ordering purposes
-            // (today + dayNumber offset), but the real scheduling is training_day-based
+            // Use training_day as an offset from the microcycle start_date for ordering.
+            // This ensures workouts spread across the week in the planner view.
+            const { data: microWithDates } = await supabase
+                .from('microcycles')
+                .select('start_date')
+                .eq('id', microcycle.id)
+                .single()
+
+            const baseDate = microWithDates?.start_date ?? new Date().toISOString().split('T')[0]
+            const offsetDate = new Date(baseDate)
+            offsetDate.setDate(offsetDate.getDate() + (day.dayNumber - 1))
+            const syntheticDate = offsetDate.toISOString().split('T')[0]
+
             const { data: workout, error: workoutError } = await supabase
                 .from('workouts')
                 .insert({
@@ -530,7 +541,7 @@ export async function applyAllocation(
                     modality: session.modality,
                     name: session.name,
                     coach_notes: session.coach_notes,
-                    scheduled_date: new Date().toISOString().split('T')[0], // placeholder
+                    scheduled_date: syntheticDate,
                     is_completed: false,
                     is_allocated: true,
                     session_inventory_id: session.id,
