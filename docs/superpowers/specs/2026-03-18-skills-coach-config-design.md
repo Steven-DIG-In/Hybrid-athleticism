@@ -290,6 +290,7 @@ The 733-line orchestrator becomes a generic engine.
 | mesocycle_id | uuid | FK → mesocycles |
 | week_number | int | Which week |
 | sleep_quality | int (1-5) | Self-rated |
+| energy_level | int (1-5) | Self-rated |
 | stress_level | int (1-5) | Self-rated |
 | motivation | int (1-5) | Self-rated |
 | soreness | jsonb | `{ "lower_back": 3, "shoulders": 1 }` by body region |
