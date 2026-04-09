@@ -8,6 +8,9 @@ import {
     Dumbbell,
     Timer,
     Zap,
+    Heart,
+    Flame,
+    Mountain,
     Activity,
     ChevronDown,
     ChevronRight,
@@ -45,11 +48,11 @@ import { getUnscheduledInventory } from '@/lib/actions/inventory.actions'
 // ─── Modality Config ────────────────────────────────────────────────────────
 
 const MODALITY_CONFIG: Record<string, { icon: typeof Dumbbell; color: string; badge: string; bgGlow: string }> = {
-    LIFTING: { icon: Dumbbell, color: 'text-blue-400', badge: 'modality_lifting', bgGlow: 'rgba(59,130,246,0.08)' },
-    CARDIO: { icon: Timer, color: 'text-emerald-400', badge: 'modality_cardio', bgGlow: 'rgba(52,211,153,0.08)' },
-    RUCKING: { icon: Timer, color: 'text-amber-400', badge: 'modality_rucking', bgGlow: 'rgba(251,191,36,0.08)' },
-    METCON: { icon: Zap, color: 'text-purple-400', badge: 'modality_metcon', bgGlow: 'rgba(168,85,247,0.08)' },
-    MOBILITY: { icon: Activity, color: 'text-teal-400', badge: 'modality_cardio', bgGlow: 'rgba(20,184,166,0.08)' },
+    LIFTING: { icon: Dumbbell, color: 'text-amber-500', badge: 'modality_lifting', bgGlow: 'rgba(217,119,6,0.08)' },
+    CARDIO: { icon: Heart, color: 'text-emerald-500', badge: 'modality_cardio', bgGlow: 'rgba(5,150,105,0.08)' },
+    RUCKING: { icon: Mountain, color: 'text-stone-400', badge: 'modality_rucking', bgGlow: 'rgba(146,64,14,0.08)' },
+    METCON: { icon: Flame, color: 'text-orange-500', badge: 'modality_metcon', bgGlow: 'rgba(234,88,12,0.08)' },
+    MOBILITY: { icon: Activity, color: 'text-teal-500', badge: 'modality_cardio', bgGlow: 'rgba(13,148,136,0.08)' },
 }
 
 function getModalityConfig(modality: string, name: string) {
@@ -610,6 +613,52 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                 weekEndDate={calendarWeekEnd}
             />
 
+            {/* Week Calendar with drag-and-drop */}
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest">Weekly Calendar</span>
+                    {allocatedSessions.filter(w => !w.is_completed).length > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-[10px] border border-white/5 text-neutral-500 hover:text-red-400 hover:border-red-500/30"
+                            onClick={handleDeallocate}
+                            disabled={isDeallocating}
+                        >
+                            {isDeallocating ? (
+                                <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Clearing...</>
+                            ) : (
+                                <><RefreshCw className="w-3 h-3 mr-1.5" /> Clear Calendar</>
+                            )}
+                        </Button>
+                    )}
+                </div>
+
+                <WeekCalendar
+                    sessions={allWorkouts}
+                    weekStartDate={calendarWeekStart}
+                    weekEndDate={calendarWeekEnd}
+                    dayLoadSummaries={dayLoadSummaries}
+                    selectedSessionId={selectedSessionId}
+                    onDayClick={handleDayClick}
+                    onSessionClick={handleMoveSession}
+                    onDropSession={handleDropSession}
+                    onDragStartSession={(id) => setDraggingSessionId(id)}
+                    onDragEndSession={() => setDraggingSessionId(null)}
+                    draggingSessionId={draggingSessionId}
+                />
+
+                {/* Conflict Warning Overlay */}
+                {pendingConflicts && (
+                    <ConflictWarning
+                        conflicts={pendingConflicts.conflicts}
+                        onConfirm={handleConfirmConflictMove}
+                        onCancel={() => setPendingConflicts(null)}
+                        isPending={isReassigning}
+                    />
+                )}
+            </div>
+
             {/* Link to full planner */}
             <div className="flex justify-center">
                 <Button
@@ -624,52 +673,6 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
             </div>
         </div>
     ) : null
-
-    const oldCalendarContent = calendarWeekStart && calendarWeekEnd ? (
-        <div className="space-y-3">
-            {allocatedSessions.filter(w => !w.is_completed).length > 0 && (
-                <div className="flex justify-end">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-[10px] border border-white/5 text-neutral-500 hover:text-red-400 hover:border-red-500/30"
-                        onClick={handleDeallocate}
-                        disabled={isDeallocating}
-                    >
-                        {isDeallocating ? (
-                            <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Clearing...</>
-                        ) : (
-                            <><RefreshCw className="w-3 h-3 mr-1.5" /> Clear Calendar</>
-                        )}
-                    </Button>
-                </div>
-            )}
-
-            <WeekCalendar
-                sessions={allWorkouts}
-                weekStartDate={calendarWeekStart}
-                weekEndDate={calendarWeekEnd}
-                dayLoadSummaries={dayLoadSummaries}
-                selectedSessionId={selectedSessionId}
-                onDayClick={handleDayClick}
-                onSessionClick={handleMoveSession}
-                onDropSession={handleDropSession}
-                onDragStartSession={(id) => setDraggingSessionId(id)}
-                onDragEndSession={() => setDraggingSessionId(null)}
-                draggingSessionId={draggingSessionId}
-            />
-
-            {/* Conflict Warning Overlay */}
-            {pendingConflicts && (
-                <ConflictWarning
-                    conflicts={pendingConflicts.conflicts}
-                    onConfirm={handleConfirmConflictMove}
-                    onCancel={() => setPendingConflicts(null)}
-                    isPending={isReassigning}
-                />
-            )}
-        </div>
-    ) : (null as any)
 
     return (
         <div className="flex flex-col gap-5 pt-2 pb-8 relative">
@@ -697,10 +700,26 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
             <div className="flex bg-[#0a0a0a] border border-[#222222] divide-x divide-[#222222]">
                 <div className="px-4 py-3 flex-1 flex flex-col justify-center">
                     <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest mb-0.5">Phase</span>
-                    <span className="text-sm font-space-grotesk text-white">
-                        Block {currentWeek?.week_number ?? '—'}
-                        <span className="text-neutral-500"> / {currentMesocycle?.week_count ?? '—'}</span>
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => navigateWeek('prev')}
+                            disabled={currentWeekNumber <= 1}
+                            className="text-neutral-500 hover:text-cyan-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="text-sm font-space-grotesk text-white">
+                            Block {currentWeek?.week_number ?? '—'}
+                            <span className="text-neutral-500"> / {currentMesocycle?.week_count ?? '—'}</span>
+                        </span>
+                        <button
+                            onClick={() => navigateWeek('next')}
+                            disabled={currentWeekNumber >= data.totalWeeks}
+                            className="text-neutral-500 hover:text-cyan-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
                 <div className="px-4 py-3 flex-1 flex flex-col justify-center">
                     <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest mb-0.5">Focus</span>

@@ -19,6 +19,8 @@ import type {
     InventoryGroup,
 } from '@/lib/types/inventory.types'
 import type { TwoADayWillingness } from '@/lib/types/database.types'
+import type { SessionLoadProfile } from '@/lib/scheduling/load-scoring'
+import { computeConflictPenalty } from '@/lib/scheduling/load-scoring'
 
 // ─── Generate Session Inventory ─────────────────────────────────────────────
 
@@ -146,6 +148,137 @@ const MODALITY_PRIORITY: Record<string, number> = {
     MOBILITY: 5,
 }
 
+// ─── Load Estimation from Inventory ─────────────────────────────────────────
+
+const COMPOUND_EXERCISES = new Set([
+    'back squat', 'front squat', 'squat', 'deadlift', 'conventional deadlift',
+    'sumo deadlift', 'romanian deadlift', 'rdl', 'bench press', 'overhead press',
+    'ohp', 'military press', 'barbell row', 'bent over row', 'pull up', 'pull-up',
+    'chin up', 'chin-up', 'clean', 'power clean', 'snatch', 'clean and jerk',
+    'thruster', 'push press', 'hip thrust', 'lunge', 'walking lunge',
+    'bulgarian split squat', 'step up', 'dip', 'dips', 'pendlay row',
+])
+
+const HEAVY_LOWER_EXERCISES = new Set([
+    'back squat', 'front squat', 'squat', 'deadlift', 'conventional deadlift',
+    'sumo deadlift', 'hip thrust', 'leg press',
+])
+
+const LOWER_BODY_MUSCLES = new Set([
+    'quads', 'quadriceps', 'hamstrings', 'glutes', 'calves', 'adductors',
+    'hip_flexors', 'legs', 'lower_body', 'posterior_chain',
+])
+
+const UPPER_BODY_MUSCLES = new Set([
+    'chest', 'pecs', 'back', 'lats', 'shoulders', 'delts', 'deltoids',
+    'biceps', 'triceps', 'forearms', 'upper_body', 'traps', 'rhomboids',
+])
+
+/**
+ * Estimate a SessionLoadProfile from a SessionInventory item.
+ * Uses session name, modality, coach notes, and prescription data
+ * to approximate the load profile without needing exercise_sets from DB.
+ */
+function estimateLoadFromInventory(session: SessionInventory): SessionLoadProfile {
+    const modality = session.modality
+    const name = (session.name ?? '').toLowerCase()
+    const coachNotes = (session.coach_notes ?? '').toLowerCase()
+
+    const isBenchmarkTest = name.includes('benchmark') || name.includes('test') ||
+        coachNotes.includes('benchmark') || coachNotes.includes('max test')
+    const isMobility = name.includes('mobility') || name.includes('stretch') ||
+        name.includes('recovery') || name.includes('yoga')
+
+    // Extract exercise names from prescription if available
+    const prescription = (session.adjustment_pending as unknown as Record<string, unknown>)?.prescription
+    const exerciseNames: string[] = Array.isArray(prescription)
+        ? prescription.map((e: { name?: string }) => (e.name ?? '').toLowerCase())
+        : []
+
+    const compoundCount = exerciseNames.filter(e => COMPOUND_EXERCISES.has(e)).length
+    const hasHeavyLower = exerciseNames.some(e => HEAVY_LOWER_EXERCISES.has(e))
+
+    // Infer muscle groups from name and exercises
+    const muscleGroups: string[] = []
+    if (name.includes('lower') || name.includes('leg') || name.includes('squat') || name.includes('deadlift') || hasHeavyLower) {
+        muscleGroups.push('lower_body')
+    }
+    if (name.includes('upper') || name.includes('push') || name.includes('pull') || name.includes('bench') || name.includes('press')) {
+        muscleGroups.push('upper_body')
+    }
+    // Check exercise-level muscle groups from prescription
+    if (Array.isArray(prescription)) {
+        for (const ex of prescription) {
+            const mg = ((ex as { muscleGroup?: string }).muscleGroup ?? '').toLowerCase()
+            if (mg && LOWER_BODY_MUSCLES.has(mg) && !muscleGroups.includes('lower_body')) muscleGroups.push('lower_body')
+            if (mg && UPPER_BODY_MUSCLES.has(mg) && !muscleGroups.includes('upper_body')) muscleGroups.push('upper_body')
+        }
+    }
+
+    let totalLoad = 0
+    let cnsLoad = 0
+    let muscularLoad = 0
+    let isHighIntensity = false
+
+    if (isMobility || modality === 'MOBILITY') {
+        totalLoad = 1; cnsLoad = 0; muscularLoad = 1
+    } else if (modality === 'LIFTING') {
+        totalLoad = 5; cnsLoad = 3; muscularLoad = 5
+        if (compoundCount >= 2) { totalLoad += 1; cnsLoad += 1 }
+        if (hasHeavyLower) { totalLoad += 1; cnsLoad += 1; muscularLoad += 1 }
+        // Also infer from name when no prescription data
+        if (exerciseNames.length === 0) {
+            if (name.includes('lower') || name.includes('squat') || name.includes('deadlift')) {
+                totalLoad += 1; cnsLoad += 1; muscularLoad += 1
+                isHighIntensity = true
+            }
+            if (name.includes('heavy') || name.includes('max')) {
+                totalLoad += 1; cnsLoad += 1
+                isHighIntensity = true
+            }
+        }
+        isHighIntensity = isHighIntensity || (hasHeavyLower && compoundCount >= 2)
+    } else if (modality === 'METCON') {
+        totalLoad = 6; cnsLoad = 5; muscularLoad = 4; isHighIntensity = true
+        if (coachNotes.includes('max') || coachNotes.includes('amrap') || name.includes('max')) {
+            totalLoad += 1; cnsLoad += 1
+        }
+    } else if (modality === 'CARDIO') {
+        const isEasy = name.includes('easy') || name.includes('zone 2') || name.includes('z2') || name.includes('recovery')
+        const isHard = name.includes('interval') || name.includes('threshold') || name.includes('vo2') ||
+            name.includes('sprint') || name.includes('fartlek') || name.includes('time trial')
+        if (isEasy) {
+            totalLoad = 2; cnsLoad = 1; muscularLoad = 2
+        } else if (isHard || isBenchmarkTest) {
+            totalLoad = 6; cnsLoad = 4; muscularLoad = 4; isHighIntensity = true
+        } else {
+            totalLoad = 3; cnsLoad = 2; muscularLoad = 3
+        }
+        if (name.includes('run') || name.includes('cycle') || name.includes('bike')) muscleGroups.push('lower_body')
+        if (name.includes('row') || name.includes('swim')) muscleGroups.push('upper_body')
+    } else if (modality === 'RUCKING') {
+        totalLoad = 4; cnsLoad = 2; muscularLoad = 4
+        muscleGroups.push('lower_body')
+        if (coachNotes.includes('heavy') || name.includes('heavy')) { totalLoad += 1; muscularLoad += 1 }
+    }
+
+    if (isBenchmarkTest) { totalLoad += 1; cnsLoad += 1 }
+
+    return {
+        sessionId: session.id,
+        sessionName: session.name,
+        totalLoad: Math.min(10, Math.max(0, totalLoad)),
+        cnsLoad: Math.min(10, Math.max(0, cnsLoad)),
+        muscularLoad: Math.min(10, Math.max(0, muscularLoad)),
+        primaryMuscleGroups: [...new Set(muscleGroups)],
+        modality,
+        isHighIntensity,
+        isBenchmarkTest,
+        isLowerBodyDominant: muscleGroups.some(mg => LOWER_BODY_MUSCLES.has(mg)),
+        isUpperBodyDominant: muscleGroups.some(mg => UPPER_BODY_MUSCLES.has(mg)),
+    }
+}
+
 /**
  * Generate day-based allocation suggestions for a week's inventory.
  *
@@ -153,8 +286,8 @@ const MODALITY_PRIORITY: Record<string, number> = {
  * The athlete does "Day 1" whenever they are ready, then "Day 2", etc.
  * Two sessions on the same training_day = two-a-day (slot 1 AM, slot 2 PM).
  *
- * Uses athlete profile (available_days, two_a_day) and interference rules
- * to distribute sessions optimally across training days.
+ * Uses athlete profile (available_days, two_a_day), load profiles, and
+ * interference penalties to distribute sessions optimally across training days.
  */
 export async function suggestAllocation(
     mesocycleId: string,
@@ -218,14 +351,23 @@ export async function suggestAllocation(
     // Initialize training day slots
     // Each day can hold slot 1 (primary) and optionally slot 2 (secondary)
     const daySlots: Map<number, { slot1: SessionInventory | null; slot2: SessionInventory | null; slot1Reasoning: string; slot2Reasoning: string }> = new Map()
+    // Track load profiles per day for conflict-aware placement
+    const dayLoadProfiles: Map<number, SessionLoadProfile[]> = new Map()
     for (let d = 1; d <= availableDays; d++) {
         daySlots.set(d, { slot1: null, slot2: null, slot1Reasoning: '', slot2Reasoning: '' })
+        dayLoadProfiles.set(d, [])
+    }
+
+    // Pre-compute load profiles for all sessions
+    const loadProfileCache = new Map<string, SessionLoadProfile>()
+    for (const session of sortedSessions) {
+        loadProfileCache.set(session.id, estimateLoadFromInventory(session))
     }
 
     const warnings: string[] = []
     const maxPerDay = twoADay === 'no' ? 1 : 2
 
-    // Helper: get modality on a given day's slot 1
+    // Helper: get modality on a given day
     const dayHasModality = (day: number, mod: string): boolean => {
         const slot = daySlots.get(day)
         if (!slot) return false
@@ -249,6 +391,8 @@ export async function suggestAllocation(
         if (!slot || slot.slot1 !== null) return false
         slot.slot1 = session
         slot.slot1Reasoning = reasoning
+        const profile = loadProfileCache.get(session.id)
+        if (profile) dayLoadProfiles.get(day)!.push(profile)
         return true
     }
 
@@ -259,7 +403,23 @@ export async function suggestAllocation(
         if (!slot || slot.slot1 === null || slot.slot2 !== null) return false
         slot.slot2 = session
         slot.slot2Reasoning = reasoning
+        const profile = loadProfileCache.get(session.id)
+        if (profile) dayLoadProfiles.get(day)!.push(profile)
         return true
+    }
+
+    // Helper: find the best day for a session using conflict penalty scoring
+    // Returns sorted candidate days (lowest penalty first)
+    const scoreDays = (session: SessionInventory, candidates: number[]): { day: number; penalty: number }[] => {
+        const profile = loadProfileCache.get(session.id)
+        if (!profile) return candidates.map(d => ({ day: d, penalty: 0 }))
+
+        return candidates
+            .map(d => ({
+                day: d,
+                penalty: computeConflictPenalty(profile, dayLoadProfiles.get(d) ?? []),
+            }))
+            .sort((a, b) => a.penalty - b.penalty)
     }
 
     // ── STEP 1: Spread LIFTING sessions across days with gaps ─────────────
@@ -272,34 +432,39 @@ export async function suggestAllocation(
 
         let nextDay = 1
         for (const session of liftingSessions) {
-            // Find next available slot 1 starting from nextDay
-            let placed = false
+            // Collect candidate days starting from nextDay
+            const candidates: number[] = []
             for (let attempt = nextDay; attempt <= availableDays; attempt++) {
-                if (!dayHasSlot1(attempt)) {
-                    placeSlot1(attempt, session, `Day ${attempt} - strength session, spaced for recovery`)
-                    nextDay = attempt + spacing
-                    placed = true
-                    break
+                if (!dayHasSlot1(attempt)) candidates.push(attempt)
+            }
+            // Wrap around if needed
+            if (candidates.length === 0) {
+                for (let attempt = 1; attempt < nextDay && attempt <= availableDays; attempt++) {
+                    if (!dayHasSlot1(attempt)) candidates.push(attempt)
                 }
             }
-            // Wrap around if we ran out of days
-            if (!placed) {
-                for (let attempt = 1; attempt <= availableDays; attempt++) {
-                    if (!dayHasSlot1(attempt)) {
-                        placeSlot1(attempt, session, `Day ${attempt} - strength session (wrapped placement)`)
-                        placed = true
-                        break
-                    }
-                }
+
+            let placed = false
+            if (candidates.length > 0) {
+                const scored = scoreDays(session, candidates)
+                const best = scored[0]
+                placeSlot1(best.day, session, `Day ${best.day} - strength session, spaced for recovery${best.penalty > 0 ? ' (best available, penalty: ' + best.penalty + ')' : ''}`)
+                nextDay = best.day + spacing
+                placed = true
             }
+
             // If still not placed, try as slot 2 if two-a-day allowed
             if (!placed && twoADay !== 'no') {
+                const slot2Candidates: number[] = []
                 for (let attempt = 1; attempt <= availableDays; attempt++) {
                     if (dayHasSlot2Room(attempt) && !dayHasModality(attempt, 'LIFTING')) {
-                        placeSlot2(attempt, session, `Day ${attempt} - strength as two-a-day (overflow)`)
-                        placed = true
-                        break
+                        slot2Candidates.push(attempt)
                     }
+                }
+                if (slot2Candidates.length > 0) {
+                    const scored = scoreDays(session, slot2Candidates)
+                    placeSlot2(scored[0].day, session, `Day ${scored[0].day} - strength as two-a-day (overflow)`)
+                    placed = true
                 }
             }
             if (!placed) {
@@ -308,32 +473,32 @@ export async function suggestAllocation(
         }
     }
 
-    // ── STEP 2: Assign CARDIO to gap days first ──────────────────────────
+    // ── STEP 2: Assign CARDIO — prefer empty days, then lowest-penalty ───
     const unplacedCardio: SessionInventory[] = []
     for (const session of cardioSessions) {
-        // Prefer non-lifting days first
-        let placed = false
+        const emptyDays: number[] = []
         for (let d = 1; d <= availableDays; d++) {
-            if (!dayHasSlot1(d)) {
-                placeSlot1(d, session, `Day ${d} - cardio on rest day from lifting`)
-                placed = true
-                break
-            }
+            if (!dayHasSlot1(d)) emptyDays.push(d)
         }
-        if (!placed) {
+        if (emptyDays.length > 0) {
+            const scored = scoreDays(session, emptyDays)
+            placeSlot1(scored[0].day, session, `Day ${scored[0].day} - cardio on rest day from lifting`)
+        } else {
             unplacedCardio.push(session)
         }
     }
-    // Place remaining cardio as slot 2 if two-a-day allowed
+    // Place remaining cardio as slot 2 — pick lowest conflict day
     for (const session of unplacedCardio) {
         let placed = false
         if (twoADay !== 'no') {
+            const slot2Candidates: number[] = []
             for (let d = 1; d <= availableDays; d++) {
-                if (dayHasSlot2Room(d)) {
-                    placeSlot2(d, session, `Day ${d} - cardio paired as two-a-day`)
-                    placed = true
-                    break
-                }
+                if (dayHasSlot2Room(d)) slot2Candidates.push(d)
+            }
+            if (slot2Candidates.length > 0) {
+                const scored = scoreDays(session, slot2Candidates)
+                placeSlot2(scored[0].day, session, `Day ${scored[0].day} - cardio paired as two-a-day (low interference)`)
+                placed = true
             }
         }
         if (!placed) {
@@ -341,35 +506,35 @@ export async function suggestAllocation(
         }
     }
 
-    // ── STEP 3: Assign METCON + RUCKING to remaining slots ──────────────
+    // ── STEP 3: Assign METCON + RUCKING — conflict-aware placement ───────
     const otherHighIntensity = [...metconSessions, ...ruckingSessions]
     const unplacedOther: SessionInventory[] = []
     for (const session of otherHighIntensity) {
-        let placed = false
-        // Fill empty days first
+        const emptyDays: number[] = []
         for (let d = 1; d <= availableDays; d++) {
-            if (!dayHasSlot1(d)) {
-                const label = session.modality === 'METCON' ? 'conditioning' : 'rucking'
-                placeSlot1(d, session, `Day ${d} - ${label} session`)
-                placed = true
-                break
-            }
+            if (!dayHasSlot1(d)) emptyDays.push(d)
         }
-        if (!placed) {
+        if (emptyDays.length > 0) {
+            const scored = scoreDays(session, emptyDays)
+            const label = session.modality === 'METCON' ? 'conditioning' : 'rucking'
+            placeSlot1(scored[0].day, session, `Day ${scored[0].day} - ${label} session`)
+        } else {
             unplacedOther.push(session)
         }
     }
-    // Place remaining as slot 2
+    // Place remaining as slot 2 — pick lowest-penalty day
     for (const session of unplacedOther) {
         let placed = false
         if (twoADay !== 'no') {
+            const slot2Candidates: number[] = []
             for (let d = 1; d <= availableDays; d++) {
-                if (dayHasSlot2Room(d)) {
-                    const label = session.modality === 'METCON' ? 'conditioning' : 'rucking'
-                    placeSlot2(d, session, `Day ${d} - ${label} paired as two-a-day`)
-                    placed = true
-                    break
-                }
+                if (dayHasSlot2Room(d)) slot2Candidates.push(d)
+            }
+            if (slot2Candidates.length > 0) {
+                const scored = scoreDays(session, slot2Candidates)
+                const label = session.modality === 'METCON' ? 'conditioning' : 'rucking'
+                placeSlot2(scored[0].day, session, `Day ${scored[0].day} - ${label} paired as two-a-day (lowest conflict)`)
+                placed = true
             }
         }
         if (!placed) {
@@ -382,12 +547,15 @@ export async function suggestAllocation(
         let placed = false
         // Try to pair with another session as slot 2
         if (maxPerDay >= 2) {
+            const slot2Candidates: number[] = []
             for (let d = 1; d <= availableDays; d++) {
-                if (dayHasSlot2Room(d)) {
-                    placeSlot2(d, session, `Day ${d} - mobility as primer/cooldown`)
-                    placed = true
-                    break
-                }
+                if (dayHasSlot2Room(d)) slot2Candidates.push(d)
+            }
+            if (slot2Candidates.length > 0) {
+                // Mobility has near-zero penalty, but still pick best fit
+                const scored = scoreDays(session, slot2Candidates)
+                placeSlot2(scored[0].day, session, `Day ${scored[0].day} - mobility as primer/cooldown`)
+                placed = true
             }
         }
         // If no room as slot 2, give its own day
@@ -421,6 +589,19 @@ export async function suggestAllocation(
         const slot = daySlots.get(d)
         if (slot?.slot1?.modality === 'LIFTING' && slot?.slot2?.modality === 'LIFTING') {
             warnings.push(`Day ${d} has two lifting sessions - high CNS demand`)
+        }
+
+        // Report any remaining conflicts from the load scoring system
+        const dayProfiles = dayLoadProfiles.get(d) ?? []
+        if (dayProfiles.length >= 2) {
+            for (let i = 0; i < dayProfiles.length; i++) {
+                for (let j = i + 1; j < dayProfiles.length; j++) {
+                    const penalty = computeConflictPenalty(dayProfiles[i], [dayProfiles[j]])
+                    if (penalty >= 5) {
+                        warnings.push(`Day ${d}: "${dayProfiles[i].sessionName}" + "${dayProfiles[j].sessionName}" has high interference (penalty ${penalty}) - limited by available days`)
+                    }
+                }
+            }
         }
     }
 

@@ -875,13 +875,6 @@ export function WorkoutLogger({
                         if (allComplete && !completedExercises.has(set.exercise_name)) {
                             // Mark exercise as completed
                             setCompletedExercises(prev => new Set(prev).add(set.exercise_name))
-
-                            // Show coach note if available
-                            if (set.notes) {
-                                setActiveCoachNote(set.notes)
-                                // Auto-dismiss after 10 seconds
-                                setTimeout(() => setActiveCoachNote(null), 10000)
-                            }
                         }
                     }
                 }
@@ -1506,17 +1499,17 @@ export function WorkoutLogger({
                     />
                 )}
 
-                {/* Coach notes for this exercise (#24) */}
+                {/* Coach notes for this exercise (#24) — shown before sets start */}
                 {currentExerciseData?.notes && !currentTempo && (
-                    <div className="flex items-start gap-2 px-1">
-                        <Info className="w-3 h-3 text-neutral-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-[10px] font-inter text-neutral-500 italic">{currentExerciseData.notes}</span>
+                    <div className="flex items-start gap-2 p-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded mt-1 mb-2">
+                        <Info className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs font-inter text-neutral-300 leading-relaxed">{currentExerciseData.notes}</span>
                     </div>
                 )}
                 {currentExerciseData?.notes && currentTempo && !currentExerciseData.notes.match(/^\d+-\d+-\d+-\d+\s*tempo$/i) && (
-                    <div className="flex items-start gap-2 px-1">
-                        <Info className="w-3 h-3 text-neutral-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-[10px] font-inter text-neutral-500 italic">
+                    <div className="flex items-start gap-2 p-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded mt-1 mb-2">
+                        <Info className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs font-inter text-neutral-300 leading-relaxed">
                             {currentExerciseData.notes.replace(/\d+-\d+-\d+-\d+\s*tempo/i, '').trim()}
                         </span>
                     </div>

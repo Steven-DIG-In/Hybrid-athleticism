@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Target, TrendingUp, Shield, Zap } from 'lucide-react'
 import type { Mesocycle } from '@/lib/types/database.types'
@@ -65,6 +66,7 @@ const COACH_COLORS: Record<string, string> = {
 
 export function MesocyclePlanView({ mesocycle, currentWeekNumber }: MesocyclePlanViewProps) {
     const [isOpen, setIsOpen] = useState(false)
+    const router = useRouter()
 
     // Extract plan data from either source
     const aiContext = mesocycle.ai_context_json as Record<string, unknown> | null
@@ -148,16 +150,14 @@ export function MesocyclePlanView({ mesocycle, currentWeekNumber }: MesocyclePla
                                     <div className="space-y-1">
                                         {weeks.map((week) => {
                                             const isCurrent = week.weekNumber === currentWeekNumber
-                                            const isPast = week.weekNumber < currentWeekNumber
                                             return (
-                                                <div
+                                                <button
                                                     key={week.weekNumber}
-                                                    className={`flex items-center gap-2 px-2 py-1.5 rounded ${
+                                                    onClick={() => router.push(`/dashboard?week=${week.weekNumber}`)}
+                                                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded transition-colors ${
                                                         isCurrent
                                                             ? 'bg-cyan-500/10 border border-cyan-500/20'
-                                                            : isPast
-                                                                ? 'opacity-50'
-                                                                : ''
+                                                            : 'hover:bg-[#151515] cursor-pointer'
                                                     }`}
                                                 >
                                                     <span className={`text-[10px] font-mono w-8 ${
@@ -193,7 +193,7 @@ export function MesocyclePlanView({ mesocycle, currentWeekNumber }: MesocyclePla
                                                     }`}>
                                                         {week.emphasis}
                                                     </span>
-                                                </div>
+                                                </button>
                                             )
                                         })}
                                     </div>

@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
     Dumbbell,
-    Timer,
-    Footprints,
-    Zap,
+    Heart,
+    Flame,
+    Mountain,
     Activity,
     CheckCircle2,
     Circle,
@@ -25,11 +25,11 @@ interface CurrentWeekSessionsProps {
 }
 
 const MODALITY_CONFIG: Record<string, { icon: typeof Dumbbell; color: string; badge: string }> = {
-    LIFTING: { icon: Dumbbell, color: 'text-blue-400', badge: 'modality_lifting' },
-    CARDIO: { icon: Timer, color: 'text-emerald-400', badge: 'modality_cardio' },
-    RUCKING: { icon: Footprints, color: 'text-amber-400', badge: 'modality_rucking' },
-    METCON: { icon: Zap, color: 'text-purple-400', badge: 'modality_metcon' },
-    MOBILITY: { icon: Activity, color: 'text-teal-400', badge: 'modality_cardio' },
+    LIFTING: { icon: Dumbbell, color: 'text-amber-500', badge: 'modality_lifting' },
+    CARDIO: { icon: Heart, color: 'text-emerald-500', badge: 'modality_cardio' },
+    RUCKING: { icon: Mountain, color: 'text-stone-400', badge: 'modality_rucking' },
+    METCON: { icon: Flame, color: 'text-orange-500', badge: 'modality_metcon' },
+    MOBILITY: { icon: Activity, color: 'text-teal-500', badge: 'modality_cardio' },
 }
 
 export function CurrentWeekSessions({ sessions, weekStartDate, weekEndDate }: CurrentWeekSessionsProps) {

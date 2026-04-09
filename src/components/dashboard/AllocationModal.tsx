@@ -16,11 +16,11 @@ interface AllocationModalProps {
 }
 
 const MODALITY_CONFIG: Record<string, { color: string; badge: string }> = {
-    LIFTING: { color: 'text-blue-400', badge: 'modality_lifting' },
-    CARDIO: { color: 'text-emerald-400', badge: 'modality_cardio' },
-    RUCKING: { color: 'text-amber-400', badge: 'modality_rucking' },
-    METCON: { color: 'text-purple-400', badge: 'modality_metcon' },
-    MOBILITY: { color: 'text-teal-400', badge: 'modality_cardio' },
+    LIFTING: { color: 'text-amber-500', badge: 'modality_lifting' },
+    CARDIO: { color: 'text-emerald-500', badge: 'modality_cardio' },
+    RUCKING: { color: 'text-stone-400', badge: 'modality_rucking' },
+    METCON: { color: 'text-orange-500', badge: 'modality_metcon' },
+    MOBILITY: { color: 'text-teal-500', badge: 'modality_cardio' },
 }
 
 export function AllocationModal({

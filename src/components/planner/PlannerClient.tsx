@@ -240,9 +240,12 @@ function BlockCard({ block, onAllocate, defaultExpanded }: BlockCardProps) {
             className={`border ${headerBorder} overflow-hidden`}
         >
             {/* Block header */}
-            <button
+            <div
+                role="button"
+                tabIndex={0}
                 onClick={() => setIsExpanded(v => !v)}
-                className={`w-full flex items-center justify-between px-5 py-4 ${headerBg} hover:brightness-110 transition-all duration-150`}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(v => !v) } }}
+                className={`w-full flex items-center justify-between px-5 py-4 ${headerBg} hover:brightness-110 transition-all duration-150 cursor-pointer`}
             >
                 <div className="flex items-center gap-4">
                     {/* Block number badge */}
@@ -297,7 +300,7 @@ function BlockCard({ block, onAllocate, defaultExpanded }: BlockCardProps) {
                         <ChevronRight className="w-4 h-4 text-neutral-600" />
                     </motion.div>
                 </div>
-            </button>
+            </div>
 
             {/* Block body */}
             <AnimatePresence initial={false}>

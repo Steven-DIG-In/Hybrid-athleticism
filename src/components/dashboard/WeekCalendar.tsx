@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     Dumbbell, Footprints, Mountain, Timer, Waves,
-    Bike, Heart, Target, AlertTriangle,
+    Bike, Heart, Flame, Activity, Target, AlertTriangle,
     ChevronLeft, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import type { WorkoutWithSets, DayLoadSummary } from '@/lib/types/training.types'
@@ -34,21 +34,21 @@ function getModalityMiniConfig(modality: string, name: string) {
     const lowerName = name.toLowerCase()
 
     if (modality === 'CARDIO' && (lowerName.includes('mobility') || lowerName.includes('stretch') || lowerName.includes('recovery'))) {
-        return { icon: Heart, color: 'text-violet-400', accentColor: 'rgba(139,92,246,0.5)' }
+        return { icon: Activity, color: 'text-teal-500', accentColor: 'rgba(13,148,136,0.5)' }
     }
 
     switch (modality) {
-        case 'LIFTING': return { icon: Dumbbell, color: 'text-cyan-400', accentColor: 'rgba(34,211,238,0.5)' }
+        case 'LIFTING': return { icon: Dumbbell, color: 'text-amber-500', accentColor: 'rgba(217,119,6,0.5)' }
         case 'CARDIO': {
-            if (lowerName.includes('run')) return { icon: Footprints, color: 'text-emerald-400', accentColor: 'rgba(52,211,153,0.5)' }
-            if (lowerName.includes('row')) return { icon: Waves, color: 'text-blue-400', accentColor: 'rgba(96,165,250,0.5)' }
-            if (lowerName.includes('cycle') || lowerName.includes('bike')) return { icon: Bike, color: 'text-yellow-400', accentColor: 'rgba(250,204,21,0.5)' }
-            if (lowerName.includes('swim')) return { icon: Waves, color: 'text-teal-400', accentColor: 'rgba(45,212,191,0.5)' }
-            if (lowerName.includes('ruck')) return { icon: Mountain, color: 'text-orange-400', accentColor: 'rgba(251,146,60,0.5)' }
-            return { icon: Footprints, color: 'text-emerald-400', accentColor: 'rgba(52,211,153,0.5)' }
+            if (lowerName.includes('run')) return { icon: Footprints, color: 'text-emerald-500', accentColor: 'rgba(5,150,105,0.5)' }
+            if (lowerName.includes('row')) return { icon: Waves, color: 'text-emerald-500', accentColor: 'rgba(5,150,105,0.5)' }
+            if (lowerName.includes('cycle') || lowerName.includes('bike')) return { icon: Bike, color: 'text-emerald-500', accentColor: 'rgba(5,150,105,0.5)' }
+            if (lowerName.includes('swim')) return { icon: Waves, color: 'text-emerald-500', accentColor: 'rgba(5,150,105,0.5)' }
+            if (lowerName.includes('ruck')) return { icon: Mountain, color: 'text-stone-400', accentColor: 'rgba(146,64,14,0.5)' }
+            return { icon: Heart, color: 'text-emerald-500', accentColor: 'rgba(5,150,105,0.5)' }
         }
-        case 'RUCKING': return { icon: Mountain, color: 'text-orange-400', accentColor: 'rgba(251,146,60,0.5)' }
-        case 'METCON': return { icon: Timer, color: 'text-rose-400', accentColor: 'rgba(251,113,133,0.5)' }
+        case 'RUCKING': return { icon: Mountain, color: 'text-stone-400', accentColor: 'rgba(146,64,14,0.5)' }
+        case 'METCON': return { icon: Flame, color: 'text-orange-500', accentColor: 'rgba(234,88,12,0.5)' }
         default: return { icon: Target, color: 'text-neutral-400', accentColor: 'rgba(163,163,163,0.5)' }
     }
 }
