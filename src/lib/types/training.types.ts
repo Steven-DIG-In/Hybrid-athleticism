@@ -137,6 +137,38 @@ export interface DashboardData {
         sessions: SessionInventory[]
         isComplete: boolean  // all sessions in this day have completed_at
     }>
+    /**
+     * Flattened session_inventory rows for the active week that have been
+     * scheduled to a date. Shape matches `WeekViewSession` in
+     * `src/components/dashboard/WeekViewClient.tsx`.
+     */
+    weekViewSessions: WeekViewSession[]
+}
+
+// ─── WeekView session (calendar view on the dashboard) ──────────────────────
+
+/** Status tokens shared with WeekViewClient. */
+export type WeekViewSessionStatus =
+    | 'pending'
+    | 'active'
+    | 'completed'
+    | 'missed'
+    | 'off_plan'
+
+/**
+ * Flattened view of `session_inventory` for the active week, with the linked
+ * workout id folded in. Consumed by `WeekViewClient`.
+ */
+export interface WeekViewSession {
+    id: string              // session_inventory.id
+    training_day: number
+    session_slot: number | null
+    scheduled_date: string | null
+    status: WeekViewSessionStatus
+    modality: string
+    name: string
+    workout_id: string | null
+    estimated_duration_minutes: number | null
 }
 
 // ─── Volume tracking ──────────────────────────────────────────────────────────

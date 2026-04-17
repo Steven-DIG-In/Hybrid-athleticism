@@ -2,7 +2,14 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { ActionResult, TodayViewData, DashboardData, WorkoutWithSets } from '@/lib/types/training.types'
+import type {
+    ActionResult,
+    TodayViewData,
+    DashboardData,
+    WorkoutWithSets,
+    WeekViewSession,
+    WeekViewSessionStatus,
+} from '@/lib/types/training.types'
 import type { SessionInventory } from '@/lib/types/inventory.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
@@ -485,6 +492,49 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
         }
     }
 
+    // Fetch flattened WeekView-shape rows for the active week (for <WeekViewClient />).
+    // Only sessions with a scheduled_date are included — unscheduled rows live in the
+    // inventory sidebar.
+    let weekViewSessions: WeekViewSession[] = []
+    if (currentMesocycle && currentWeek) {
+        const currentWeekNumber = (currentWeek as { week_number: number }).week_number
+        const { data: weekSessions } = await supabase
+            .from('session_inventory')
+            .select(`
+                id, training_day, session_slot, scheduled_date, status, modality,
+                name, estimated_duration_minutes,
+                workouts (id)
+            `)
+            .eq('user_id', user.id)
+            .eq('mesocycle_id', currentMesocycle.id)
+            .eq('week_number', currentWeekNumber)
+            .not('scheduled_date', 'is', null)
+
+        weekViewSessions = ((weekSessions ?? []) as Array<{
+            id: string
+            training_day: number | null
+            session_slot: number | null
+            scheduled_date: string | null
+            status: string | null
+            modality: string | null
+            name: string | null
+            estimated_duration_minutes: number | null
+            workouts: Array<{ id: string }> | null
+        }>)
+            .filter(row => row.training_day !== null)
+            .map(row => ({
+                id: row.id,
+                training_day: row.training_day as number,
+                session_slot: row.session_slot,
+                scheduled_date: row.scheduled_date,
+                status: (row.status ?? 'pending') as WeekViewSessionStatus,
+                modality: row.modality ?? 'LIFTING',
+                name: row.name ?? 'Session',
+                workout_id: row.workouts?.[0]?.id ?? null,
+                estimated_duration_minutes: row.estimated_duration_minutes,
+            }))
+    }
+
     const completedCount = sessionPool.filter(w => w.is_completed).length
     const totalCount = sessionPool.length
 
@@ -534,6 +584,7 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             mesocycleStartDate,
             mesocycleEndDate,
             trainingDays,
+            weekViewSessions,
         },
     }
 }

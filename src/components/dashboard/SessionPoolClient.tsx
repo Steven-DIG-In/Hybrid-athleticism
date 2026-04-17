@@ -25,7 +25,6 @@ import {
     AlertTriangle,
     Plus,
     ArrowRightLeft,
-    Calendar,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,6 +40,7 @@ import { UnscheduledInventory } from './UnscheduledInventory'
 import { AllocationModal } from './AllocationModal'
 import { CurrentWeekSessions } from './CurrentWeekSessions'
 import { TrainingDayList } from './TrainingDayList'
+import { WeekViewClient } from './WeekViewClient'
 import type { DashboardData, WorkoutWithSets, DayLoadSummary } from '@/lib/types/training.types'
 import type { UnscheduledInventoryView } from '@/lib/types/inventory.types'
 import { getUnscheduledInventory } from '@/lib/actions/inventory.actions'
@@ -606,6 +606,17 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
 
     const calendarContent = calendarWeekStart && calendarWeekEnd ? (
         <div className="space-y-4">
+            {/* Inline week view — drag-reschedule + one-click launch for the active week. */}
+            {data.weekViewSessions && data.weekViewSessions.length > 0 && (
+                <div className="space-y-2">
+                    <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest">This Week</span>
+                    <WeekViewClient
+                        sessions={data.weekViewSessions}
+                        weekStart={new Date(calendarWeekStart + 'T00:00:00')}
+                    />
+                </div>
+            )}
+
             {/* This Week's Sessions - for reviewing and starting workouts */}
             <CurrentWeekSessions
                 sessions={allWorkouts}
@@ -659,18 +670,6 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
                 )}
             </div>
 
-            {/* Link to full planner */}
-            <div className="flex justify-center">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push('/planner')}
-                    className="text-cyan-400 border-cyan-500/30 hover:bg-cyan-950/20 hover:border-cyan-500/50"
-                >
-                    <Calendar className="w-3 h-3 mr-1.5" />
-                    Open Block Planner
-                </Button>
-            </div>
         </div>
     ) : null
 

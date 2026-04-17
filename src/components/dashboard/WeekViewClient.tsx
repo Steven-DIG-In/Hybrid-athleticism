@@ -5,20 +5,10 @@ import { useRouter } from 'next/navigation'
 import { addDays, format, startOfWeek } from 'date-fns'
 import { rebindCalendarDate } from '@/lib/actions/inventory.actions'
 import { startWorkout } from '@/lib/actions/workout.actions'
+import type { WeekViewSession, WeekViewSessionStatus } from '@/lib/types/training.types'
 
-export type WeekViewSessionStatus = 'pending' | 'active' | 'completed' | 'missed' | 'off_plan'
-
-export interface WeekViewSession {
-    id: string              // session_inventory.id
-    training_day: number
-    session_slot: number | null
-    scheduled_date: string | null
-    status: WeekViewSessionStatus
-    modality: string        // 'LIFTING' | 'CARDIO' | 'METCON' | 'RUCKING' | 'MOBILITY'
-    name: string            // display name
-    workout_id: string | null
-    estimated_duration_minutes: number | null
-}
+// Re-export for backwards-compatibility with existing call sites/tests.
+export type { WeekViewSession, WeekViewSessionStatus }
 
 interface Props {
     sessions: WeekViewSession[]
