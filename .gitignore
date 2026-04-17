@@ -43,3 +43,6 @@ next-env.d.ts
 # archives & temp
 *.zip
 supabase/.temp/
+
+# worktrees
+.worktrees/
