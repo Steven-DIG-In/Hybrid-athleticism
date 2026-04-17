@@ -508,3 +508,80 @@ export async function buildWeeklyPayload(microcycleId: string) {
         },
     }
 }
+
+// ─── Off-Plan Session Logging ─────────────────────────────────────────────────
+
+export interface LogOffPlanInput {
+    modality: string  // 'run' | 'ride' | 'strength' | 'conditioning' | 'mobility' | 'other'
+    durationMinutes: number
+    rpe?: number
+    notes?: string
+    countTowardLoad?: boolean  // default derived from modality
+}
+
+/** Modality-to-domain default mapping for linked_domain. */
+const DOMAIN_BY_MODALITY: Record<string, string | null> = {
+    run: 'endurance',
+    ride: 'endurance',
+    strength: 'strength',
+    hypertrophy: 'hypertrophy',
+    conditioning: 'conditioning',
+    mobility: 'mobility',
+    other: null
+}
+
+/** Default count-toward-load behavior per modality. */
+const DEFAULT_COUNT_BY_MODALITY: Record<string, boolean> = {
+    run: true,
+    ride: true,
+    strength: true,
+    hypertrophy: true,
+    conditioning: true,
+    mobility: false,
+    other: false
+}
+
+/**
+ * Log an off-plan training session — activity outside the prescribed plan
+ * (extra run, pickup basketball, etc.) that we still want to track for load
+ * awareness. Writes to `off_plan_sessions`; load-scoring honors `count_toward_load`.
+ */
+export async function logOffPlanSession(input: LogOffPlanInput): Promise<ActionResult<{ id: string }>> {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return { success: false, error: 'Not authenticated' }
+    }
+
+    if (!input.modality || typeof input.durationMinutes !== 'number' || input.durationMinutes <= 0) {
+        return { success: false, error: 'Invalid modality or duration' }
+    }
+
+    const countToward = input.countTowardLoad
+        ?? DEFAULT_COUNT_BY_MODALITY[input.modality]
+        ?? false
+    const linkedDomain = DOMAIN_BY_MODALITY[input.modality] ?? null
+
+    const { data, error } = await supabase
+        .from('off_plan_sessions')
+        .insert({
+            user_id: user.id,
+            modality: input.modality,
+            duration_minutes: Math.round(input.durationMinutes),
+            rpe: input.rpe ?? null,
+            notes: input.notes ?? null,
+            count_toward_load: countToward,
+            linked_domain: linkedDomain
+        })
+        .select('id')
+        .single()
+
+    if (error) {
+        console.error('[logOffPlanSession]', error)
+        return { success: false, error: error.message }
+    }
+
+    revalidatePath('/dashboard')
+    revalidatePath('/log-session')
+    return { success: true, data: { id: data.id } }
+}
