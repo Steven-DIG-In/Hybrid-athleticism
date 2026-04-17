@@ -8,6 +8,7 @@ import { buildWeeklyPayload } from './logging.actions'
 import { generateStructuredResponse } from '@/lib/ai/client'
 import { CoachResponseSchema } from '@/lib/ai/schemas/coach'
 import { buildCoachSystemPrompt, buildCoachUserPrompt } from '@/lib/ai/prompts/coach'
+import { setTrainingMax } from './training-maxes.actions'
 
 // ─── AI Coach: Weekly Review Generation ─────────────────────────────────────
 
@@ -360,6 +361,26 @@ export async function respondToIntervention(
 
     if (error) {
         return { success: false, error: error.message }
+    }
+
+    // When the athlete accepts a recalibration prompt, persist the observed
+    // training max so next-session prescriptions pick up the new number.
+    if (accepted && intervention?.trigger_type === 'recalibration_prompt') {
+        const payload = intervention.input_payload as {
+            exercise?: string
+            observedMax?: number
+        } | null
+        if (payload?.exercise && typeof payload.observedMax === 'number') {
+            try {
+                await setTrainingMax({
+                    exercise: payload.exercise,
+                    trainingMaxKg: payload.observedMax,
+                    source: 'intervention_response'
+                })
+            } catch (err) {
+                console.error('[respondToIntervention] setTrainingMax failed', err)
+            }
+        }
     }
 
     revalidatePath('/coach')

@@ -453,6 +453,38 @@ export function computeWeeklyLoadSummary(
     }
 }
 
+// ─── computeDayLoad (unit-testable aggregation helper) ─────────────────────
+
+/**
+ * Minimal input shape for `computeDayLoad`. Sessions with a null
+ * `scheduled_date` are treated as unscheduled and excluded.
+ *
+ * This helper is the explicit contract for "aggregate load by calendar date,
+ * not training_day". `computeWeekLoad` and `computeWeeklyLoadSummary` follow
+ * the same invariant but operate on richer `WorkoutWithSets` inputs; this
+ * helper lets unit tests pin the invariant without needing full workout fixtures.
+ */
+export interface DayLoadInput {
+    scheduled_date: string | null
+    training_day: number
+    cns_load?: number
+    muscular_load?: number
+}
+
+export function computeDayLoad(
+    sessions: DayLoadInput[]
+): Record<string, { cns: number; muscular: number }> {
+    const out: Record<string, { cns: number; muscular: number }> = {}
+    for (const s of sessions) {
+        if (!s.scheduled_date) continue
+        const key = s.scheduled_date
+        if (!out[key]) out[key] = { cns: 0, muscular: 0 }
+        out[key].cns += s.cns_load ?? 0
+        out[key].muscular += s.muscular_load ?? 0
+    }
+    return out
+}
+
 // ─── Load Status Colors ────────────────────────────────────────────────────
 
 export function getLoadStatusColors(status: LoadStatus): LoadStatusColors {

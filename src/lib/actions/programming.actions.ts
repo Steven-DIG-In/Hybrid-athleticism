@@ -14,7 +14,7 @@ import { autoAssignSessionDates, buildTempWorkoutFromSession, findOptimalDayForS
 import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
 import {
     calculate531Wave,
-    estimateTrainingMax,
+    resolveTrainingMaxForExercise,
     calculateRPVolumeLandmarks,
     calculateWeeklyVolumeTarget,
     calculatePolarizedZoneDistribution,
@@ -290,7 +290,7 @@ export async function generateSessionPool(
     }
 
     // ─── Step 4f: Build methodology-specific context ─────────────────────────
-    const methodologyContext = buildMethodologyContext(
+    const methodologyContext = await buildMethodologyContext(
         profile, latestBenchmarks, microcycle.week_number, mesocycleData.week_count, microcycle.is_deload
     )
 
@@ -1551,14 +1551,17 @@ function deduplicateBenchmarks(benchmarks: AthleteBenchmark[]): AthleteBenchmark
 /**
  * Build methodology-specific context with concrete calculated targets.
  * These give Claude exact numbers to follow rather than philosophy strings.
+ *
+ * Async: the 5/3/1 branch now prefers the stored TM in `profiles.training_maxes`
+ * (populated by the recalibration flow) over the raw benchmark-derived estimate.
  */
-function buildMethodologyContext(
+async function buildMethodologyContext(
     profile: { strength_methodology?: string | null; hypertrophy_methodology?: string | null; endurance_methodology?: string | null; lifting_experience?: string | null; available_days?: number | null; session_duration_minutes?: number | null },
     benchmarks: AthleteBenchmark[],
     weekNumber: number,
     totalWeeks: number,
     isDeload: boolean
-): MethodologyContext | undefined {
+): Promise<MethodologyContext | undefined> {
     const ctx: MethodologyContext = {}
     const strengthMethod = profile.strength_methodology ?? 'ai_decides'
     const hypertrophyMethod = profile.hypertrophy_methodology ?? 'ai_decides'
@@ -1580,7 +1583,7 @@ function buildMethodologyContext(
                 keywords.some(kw => b.benchmark_name.toLowerCase().includes(kw))
             )
             if (bm) {
-                const tm = estimateTrainingMax(bm.value, 1)
+                const tm = await resolveTrainingMaxForExercise(displayName, bm.value, 1)
                 const wave = calculate531Wave(tm, weekInCycle)
                 const setsStr = wave.sets.map(s =>
                     `${s.reps}${s.isAmrap ? '+' : ''} @ ${s.weightKg}kg (${Math.round(s.percentTM * 100)}%TM)`

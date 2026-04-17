@@ -657,10 +657,15 @@ function ConditioningLogger({
 
 export function WorkoutLogger({
     workout,
-    displayWeightsAsPercentages = false
+    displayWeightsAsPercentages = false,
+    recalibrationNote = null
 }: {
     workout: WorkoutWithSets
     displayWeightsAsPercentages?: boolean
+    recalibrationNote?: {
+        reasoningText: string
+        createdAt: string
+    } | null
 }) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
@@ -1716,6 +1721,7 @@ export function WorkoutLogger({
             <CoachNotesBanner
                 note={activeCoachNote}
                 onDismiss={() => setActiveCoachNote(null)}
+                recalibrationNote={recalibrationNote}
             />
         </div>
     )

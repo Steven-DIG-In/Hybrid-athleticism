@@ -8,6 +8,7 @@
 
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { ActionResult } from '@/lib/types/training.types'
 import type {
@@ -21,6 +22,7 @@ import type {
 import type { TwoADayWillingness } from '@/lib/types/database.types'
 import type { SessionLoadProfile } from '@/lib/scheduling/load-scoring'
 import { computeConflictPenalty } from '@/lib/scheduling/load-scoring'
+import { initBlockPointer } from './block-pointer.actions'
 
 // ─── Generate Session Inventory ─────────────────────────────────────────────
 
@@ -798,6 +800,15 @@ export async function applyAllocation(
                 .update({ total_allocated: allocated })
                 .eq('id', existingWindow.id)
         }
+
+        // Initialize block_pointer so that completeWorkout → advanceBlockPointer
+        // starts from a known row. Idempotent (upsert) so re-allocation is safe.
+        try {
+            await initBlockPointer(mesocycleId, weekNumber)
+        } catch (err) {
+            console.error('[applyAllocation] initBlockPointer failed:', err)
+            // Don't fail the allocation — pointer will lazy-init on first advance.
+        }
     }
 
     return {
@@ -1306,5 +1317,91 @@ export async function deallocateWeek(
     }
 
     return { success: true, data: { deallocated: sessionIds.length } }
+}
+
+// ─── Reschedule Actions (calendar-date rebind, missed-session recovery) ────
+
+/**
+ * Rebind the calendar date for a session (both the inventory row and any
+ * linked workout). Does NOT change training_day — that's the invariant
+ * spine of the training-day model. Used by drag-to-reschedule on the Week View.
+ */
+export async function rebindCalendarDate(
+    sessionInventoryId: string,
+    newDate: string
+): Promise<ActionResult<null>> {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return { success: false, error: 'Not authenticated' }
+    }
+
+    const { error: invErr } = await supabase
+        .from('session_inventory')
+        .update({ scheduled_date: newDate })
+        .eq('id', sessionInventoryId)
+        .eq('user_id', user.id)
+    if (invErr) return { success: false, error: invErr.message }
+
+    // Keep the linked workout's scheduled_date in sync if one exists.
+    const { data: linkedWorkout } = await supabase
+        .from('workouts')
+        .select('id')
+        .eq('session_inventory_id', sessionInventoryId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+    if (linkedWorkout?.id) {
+        const { error: woErr } = await supabase
+            .from('workouts')
+            .update({ scheduled_date: newDate })
+            .eq('id', linkedWorkout.id)
+            .eq('user_id', user.id)
+        if (woErr) {
+            console.error('[rebindCalendarDate] workout update failed:', woErr)
+            // Don't fail the whole action — inventory rebind succeeded.
+        }
+    }
+
+    revalidatePath('/dashboard')
+    return { success: true, data: null }
+}
+
+/**
+ * Reschedule the session to today. Convenience wrapper around
+ * rebindCalendarDate. Used when the athlete taps "I'm training this today"
+ * from the Week View.
+ */
+export async function rescheduleToToday(
+    sessionInventoryId: string
+): Promise<ActionResult<null>> {
+    const today = new Date().toISOString().slice(0, 10)
+    return rebindCalendarDate(sessionInventoryId, today)
+}
+
+/**
+ * Mark a session as missed. The block_pointer advance should already have
+ * happened via completeWorkout on the next session; this action is used by
+ * day-end rollover logic or a manual athlete override. The session remains
+ * recoverable — athlete can drag it to a later date to re-activate.
+ */
+export async function markMissed(
+    sessionInventoryId: string
+): Promise<ActionResult<null>> {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return { success: false, error: 'Not authenticated' }
+    }
+
+    const { error } = await supabase
+        .from('session_inventory')
+        .update({ status: 'missed' })
+        .eq('id', sessionInventoryId)
+        .eq('user_id', user.id)
+    if (error) return { success: false, error: error.message }
+
+    revalidatePath('/dashboard')
+    return { success: true, data: null }
 }
 

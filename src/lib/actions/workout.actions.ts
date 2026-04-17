@@ -2,10 +2,19 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { ActionResult, TodayViewData, DashboardData, WorkoutWithSets } from '@/lib/types/training.types'
+import type {
+    ActionResult,
+    TodayViewData,
+    DashboardData,
+    WorkoutWithSets,
+    WeekViewSession,
+    WeekViewSessionStatus,
+} from '@/lib/types/training.types'
 import type { SessionInventory } from '@/lib/types/inventory.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
+import { advanceBlockPointer } from './block-pointer.actions'
+import { recalibrateFromTopSet } from './recalibrate-from-top-set.actions'
 
 /**
  * Get today's scheduled workout with all its sets/exercises.
@@ -181,6 +190,52 @@ export async function completeWorkout(
             console.error('[completeWorkout] performance delta generation failed:', err)
         })
     }
+
+    const today = new Date().toISOString().slice(0, 10)
+
+    // Bug #4/#5 fix: set completed_date so load-scoring aggregates correctly.
+    await supabase
+        .from('workouts')
+        .update({ completed_date: today })
+        .eq('id', workoutId)
+        .eq('user_id', user.id)
+
+    // State transition: session_inventory → 'completed', then advance block_pointer.
+    if (workout.session_inventory_id) {
+        const { data: inventory, error: invReadErr } = await supabase
+            .from('session_inventory')
+            .select('id, mesocycle_id, week_number')
+            .eq('id', workout.session_inventory_id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+        if (invReadErr) {
+            console.error('[completeWorkout] failed to read session_inventory for state transition', invReadErr)
+        } else if (inventory) {
+            const { error: invUpdateErr } = await supabase
+                .from('session_inventory')
+                .update({ status: 'completed' })
+                .eq('id', inventory.id)
+                .eq('user_id', user.id)
+            if (invUpdateErr) {
+                console.error('[completeWorkout] failed to transition session_inventory', invUpdateErr)
+            }
+
+            // Advance block pointer. Any error here is logged — athlete's workout
+            // completion must not fail because of pointer math.
+            try {
+                await advanceBlockPointer(inventory.mesocycle_id, inventory.week_number)
+            } catch (err) {
+                console.error('[completeWorkout] failed to advance block_pointer', err)
+            }
+        }
+    }
+
+    // Non-blocking: recalibration signal via agent_activity and interventions.
+    // Next-session prescription weights are NOT auto-updated (Phase 2.5).
+    recalibrateFromTopSet(workoutId).catch(err => {
+        console.error('[completeWorkout] recalibration failed:', err)
+    })
 
     revalidatePath('/dashboard')
     revalidatePath('/workout')
@@ -437,6 +492,49 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
         }
     }
 
+    // Fetch flattened WeekView-shape rows for the active week (for <WeekViewClient />).
+    // Only sessions with a scheduled_date are included — unscheduled rows live in the
+    // inventory sidebar.
+    let weekViewSessions: WeekViewSession[] = []
+    if (currentMesocycle && currentWeek) {
+        const currentWeekNumber = (currentWeek as { week_number: number }).week_number
+        const { data: weekSessions } = await supabase
+            .from('session_inventory')
+            .select(`
+                id, training_day, session_slot, scheduled_date, status, modality,
+                name, estimated_duration_minutes,
+                workouts (id)
+            `)
+            .eq('user_id', user.id)
+            .eq('mesocycle_id', currentMesocycle.id)
+            .eq('week_number', currentWeekNumber)
+            .not('scheduled_date', 'is', null)
+
+        weekViewSessions = ((weekSessions ?? []) as Array<{
+            id: string
+            training_day: number | null
+            session_slot: number | null
+            scheduled_date: string | null
+            status: string | null
+            modality: string | null
+            name: string | null
+            estimated_duration_minutes: number | null
+            workouts: Array<{ id: string }> | null
+        }>)
+            .filter(row => row.training_day !== null)
+            .map(row => ({
+                id: row.id,
+                training_day: row.training_day as number,
+                session_slot: row.session_slot,
+                scheduled_date: row.scheduled_date,
+                status: (row.status ?? 'pending') as WeekViewSessionStatus,
+                modality: row.modality ?? 'LIFTING',
+                name: row.name ?? 'Session',
+                workout_id: row.workouts?.[0]?.id ?? null,
+                estimated_duration_minutes: row.estimated_duration_minutes,
+            }))
+    }
+
     const completedCount = sessionPool.filter(w => w.is_completed).length
     const totalCount = sessionPool.length
 
@@ -486,6 +584,7 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             mesocycleStartDate,
             mesocycleEndDate,
             trainingDays,
+            weekViewSessions,
         },
     }
 }
@@ -521,4 +620,55 @@ export async function updateWorkoutDate(
 
     revalidatePath('/dashboard')
     return { success: true, data: workout }
+}
+
+/**
+ * Start a workout. Rebinds `scheduled_date` to today (so sessions started
+ * off-plan anchor to the day the athlete actually trained) and transitions
+ * the linked `session_inventory` row to `status = 'active'`.
+ *
+ * Does not update exercise_sets or start any timers — those live in the
+ * workout logger. This is a lightweight state transition only.
+ */
+export async function startWorkout(workoutId: string): Promise<ActionResult<Workout>> {
+    const supabase = await createClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return { success: false, error: 'Not authenticated' }
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+
+    const { data: workout, error: updateErr } = await supabase
+        .from('workouts')
+        .update({ scheduled_date: today })
+        .eq('id', workoutId)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+    if (updateErr) {
+        return { success: false, error: updateErr.message }
+    }
+
+    // Transition linked session_inventory row to 'active', if present.
+    if (workout?.session_inventory_id) {
+        const { error: invErr } = await supabase
+            .from('session_inventory')
+            .update({ status: 'active' })
+            .eq('id', workout.session_inventory_id)
+            .eq('user_id', user.id)
+            .select()
+            .single()
+
+        if (invErr) {
+            // Surface in logs but don't fail the start — the workout rebind succeeded.
+            console.error('startWorkout: failed to transition session_inventory', invErr)
+        }
+    }
+
+    revalidatePath('/dashboard')
+    revalidatePath(`/workout/${workoutId}`)
+    return { success: true, data: workout as Workout }
 }
