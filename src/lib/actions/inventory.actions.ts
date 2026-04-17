@@ -22,6 +22,7 @@ import type {
 import type { TwoADayWillingness } from '@/lib/types/database.types'
 import type { SessionLoadProfile } from '@/lib/scheduling/load-scoring'
 import { computeConflictPenalty } from '@/lib/scheduling/load-scoring'
+import { initBlockPointer } from './block-pointer.actions'
 
 // ─── Generate Session Inventory ─────────────────────────────────────────────
 
@@ -798,6 +799,15 @@ export async function applyAllocation(
                 .from('check_in_windows')
                 .update({ total_allocated: allocated })
                 .eq('id', existingWindow.id)
+        }
+
+        // Initialize block_pointer so that completeWorkout → advanceBlockPointer
+        // starts from a known row. Idempotent (upsert) so re-allocation is safe.
+        try {
+            await initBlockPointer(mesocycleId, weekNumber)
+        } catch (err) {
+            console.error('[applyAllocation] initBlockPointer failed:', err)
+            // Don't fail the allocation — pointer will lazy-init on first advance.
         }
     }
 
