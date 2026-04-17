@@ -1573,6 +1573,7 @@ export type Database = {
             | Database["public"]["Enums"]["time_of_day_preference"]
             | null
           training_age_years: number | null
+          training_maxes: Json
           transparency:
             | Database["public"]["Enums"]["transparency_preference"]
             | null
@@ -1657,6 +1658,7 @@ export type Database = {
             | Database["public"]["Enums"]["time_of_day_preference"]
             | null
           training_age_years?: number | null
+          training_maxes?: Json
           transparency?:
             | Database["public"]["Enums"]["transparency_preference"]
             | null
@@ -1743,6 +1745,7 @@ export type Database = {
             | Database["public"]["Enums"]["time_of_day_preference"]
             | null
           training_age_years?: number | null
+          training_maxes?: Json
           transparency?:
             | Database["public"]["Enums"]["transparency_preference"]
             | null

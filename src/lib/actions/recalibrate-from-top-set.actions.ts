@@ -13,6 +13,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { trainingMaxSkill } from '@/lib/skills/domains/strength/training-max-estimation'
 import { evaluateRecalibration } from './recalibration.actions'
+import { setTrainingMax } from './training-maxes.actions'
 
 interface TopSet {
     exercise_name: string
@@ -108,7 +109,7 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
         })
 
         try {
-            await evaluateRecalibration({
+            const result = await evaluateRecalibration({
                 coach: 'strength',
                 previousMax: previousMaxOut.trainingMax,
                 observedMax: observedMaxOut.trainingMax,
@@ -128,6 +129,24 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
                 weekNumber,
                 microcycleId: workout.microcycle_id
             })
+
+            // Tiers 'visible' and 'logged' auto-apply the new TM. The
+            // 'intervention' tier waits for athlete acknowledgment before
+            // persisting (handled in respondToIntervention).
+            if (result.tier === 'visible' || result.tier === 'logged') {
+                try {
+                    await setTrainingMax({
+                        exercise,
+                        trainingMaxKg: observedMaxOut.trainingMax,
+                        source: 'recalibration'
+                    })
+                } catch (err) {
+                    console.error(
+                        `[recalibrateFromTopSet] setTrainingMax failed for ${exercise}`,
+                        err
+                    )
+                }
+            }
         } catch (err) {
             console.error(
                 `[recalibrateFromTopSet] failed for exercise ${exercise}`, err

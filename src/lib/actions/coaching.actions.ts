@@ -32,7 +32,7 @@ import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
 import type { WorkoutWithSets } from '@/lib/types/training.types'
 import {
     calculate531Wave,
-    estimateTrainingMax,
+    resolveTrainingMaxForExercise,
     calculateRPVolumeLandmarks,
     calculateWeeklyVolumeTarget,
     calculatePolarizedZoneDistribution,
@@ -323,7 +323,7 @@ export async function generateMesocycleWithCoaches(
     const ctx = ctxResult.data
 
     // Build methodology context for the Strength Coach
-    const methodologyContext = buildStrengthMethodologyContext(
+    const methodologyContext = await buildStrengthMethodologyContext(
         ctx.profile,
         ctx.benchmarks,
         1,
@@ -474,13 +474,13 @@ export async function runWeeklyRecoveryCheck(
 
 // ─── Helper: Build Strength Methodology Context ─────────────────────────────
 
-function buildStrengthMethodologyContext(
+async function buildStrengthMethodologyContext(
     profile: { strength_methodology?: string | null; lifting_experience?: string | null },
     benchmarks: AthleteBenchmark[],
     weekNumber: number,
     totalWeeks: number,
     isDeload: boolean
-): MethodologyContext | undefined {
+): Promise<MethodologyContext | undefined> {
     const ctx: MethodologyContext = {}
     const strengthMethod = profile.strength_methodology ?? 'ai_decides'
     const experience = (profile.lifting_experience ?? 'intermediate') as 'beginner' | 'intermediate' | 'advanced'
@@ -500,7 +500,7 @@ function buildStrengthMethodologyContext(
                 keywords.some(kw => b.benchmark_name.toLowerCase().includes(kw))
             )
             if (bm) {
-                const tm = estimateTrainingMax(bm.value, 1)
+                const tm = await resolveTrainingMaxForExercise(displayName, bm.value, 1)
                 const wave = calculate531Wave(tm, weekInCycle)
                 const setsStr = wave.sets.map(s =>
                     `${s.reps}${s.isAmrap ? '+' : ''} @ ${s.weightKg}kg (${Math.round(s.percentTM * 100)}%TM)`

@@ -98,6 +98,9 @@ import {
 // Recovery scorer skill (replaces AI-driven recovery assessment)
 import { recoveryScorerSkill } from '@/lib/skills/domains/recovery/recovery-scorer'
 
+// TM resolver — prefers stored training_maxes, falls back to benchmark-derived
+import { resolveTrainingMaxForExercise } from '@/lib/training/methodology-helpers'
+
 import type { ZodType } from 'zod'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -281,13 +284,17 @@ function hasCoach(team: CoachingTeamEntry[], type: string): boolean {
 /**
  * Build skill input from the available context for a given skill name.
  * Returns undefined if the skill cannot be executed with available data.
+ *
+ * Async: the `531-progression` branch now consults the stored
+ * `profiles.training_maxes` before falling back to the benchmark-derived
+ * estimate, so fresh recalibrations propagate into next-session prescriptions.
  */
-function buildSkillInput(
+async function buildSkillInput(
     skillName: string,
     ctx: AthleteContextPacket,
     strategy: MesocycleStrategyValidated,
     domain: CoachDomain
-): unknown | undefined {
+): Promise<unknown | undefined> {
     switch (skillName) {
         case 'deload-calculator': {
             // Compute a deload prescription for this domain
@@ -349,8 +356,19 @@ function buildSkillInput(
                 }
             }
             if (skillName === '531-progression') {
+                // Normalize benchmark_name (e.g. `back_squat_1rm`) to the exercise
+                // display name we store training maxes under (e.g. `back squat`).
+                const exerciseName = benchmarks[0].benchmark_name
+                    .replace(/_\d+rm$/, '')
+                    .replace(/_/g, ' ')
+                    .trim()
+                const repCount = benchmarks[0].benchmark_name.includes('1rm') ? 1
+                    : benchmarks[0].benchmark_name.includes('3rm') ? 3 : 5
+                const tm = await resolveTrainingMaxForExercise(
+                    exerciseName, benchmarks[0].value, repCount
+                )
                 return {
-                    trainingMaxKg: benchmarks[0].value * 0.9,
+                    trainingMaxKg: tm,
                     week: ctx.weekNumber <= 4 ? ctx.weekNumber : ((ctx.weekNumber - 1) % 4) + 1,
                 }
             }
@@ -403,12 +421,12 @@ function buildSkillInput(
  * Run all assigned skills for a coach config, returning pre-computed results.
  * Shared skills are run once and cached in executedSharedSkills.
  */
-function executeAssignedSkills(
+async function executeAssignedSkills(
     config: CoachConfig,
     ctx: AthleteContextPacket,
     strategy: MesocycleStrategyValidated,
     executedSharedSkills: Map<string, unknown>
-): Map<string, unknown> {
+): Promise<Map<string, unknown>> {
     const preComputed = new Map<string, unknown>()
 
     for (const skillName of config.assignedSkills) {
@@ -424,7 +442,7 @@ function executeAssignedSkills(
         }
 
         // Build input for this skill
-        const input = buildSkillInput(skillName, ctx, strategy, config.id)
+        const input = await buildSkillInput(skillName, ctx, strategy, config.id)
         if (input === undefined) {
             console.log(`[orchestrator] Skill ${skillName}: insufficient data, will rely on AI`)
             continue
@@ -744,7 +762,7 @@ export async function generateMesocycleProgram(
 
         // Run assigned skills to pre-compute deterministic values
         const preComputed = config
-            ? executeAssignedSkills(config, ctx, strategy, executedSharedSkills)
+            ? await executeAssignedSkills(config, ctx, strategy, executedSharedSkills)
             : new Map<string, unknown>()
 
         // Build prompt args specific to this domain

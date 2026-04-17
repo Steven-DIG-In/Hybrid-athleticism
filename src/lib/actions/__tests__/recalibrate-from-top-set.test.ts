@@ -1,13 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const { recalibrationCalls } = vi.hoisted(() => ({
-    recalibrationCalls: [] as any[]
+const { recalibrationCalls, setTrainingMaxCalls, tierOverride } = vi.hoisted(() => ({
+    recalibrationCalls: [] as any[],
+    setTrainingMaxCalls: [] as any[],
+    tierOverride: { value: 'logged' as string }
 }))
 
 vi.mock('../recalibration.actions', () => ({
     evaluateRecalibration: vi.fn(async (input: any) => {
         recalibrationCalls.push(input)
-        return { tier: 'logged', applied: true, newMax: input.observedMax, driftPct: -0.05 }
+        return {
+            tier: tierOverride.value,
+            applied: tierOverride.value !== 'intervention',
+            newMax: input.observedMax,
+            driftPct: -0.05
+        }
+    })
+}))
+
+vi.mock('../training-maxes.actions', () => ({
+    setTrainingMax: vi.fn(async (input: any) => {
+        setTrainingMaxCalls.push(input)
+        return {
+            trainingMaxKg: input.trainingMaxKg,
+            updatedAt: new Date().toISOString(),
+            source: input.source
+        }
     })
 }))
 
@@ -70,7 +88,12 @@ vi.mock('@/lib/supabase/server', () => {
 import { recalibrateFromTopSet } from '../recalibrate-from-top-set.actions'
 
 describe('recalibrateFromTopSet', () => {
-    beforeEach(() => { recalibrationCalls.length = 0; vi.clearAllMocks() })
+    beforeEach(() => {
+        recalibrationCalls.length = 0
+        setTrainingMaxCalls.length = 0
+        tierOverride.value = 'logged'
+        vi.clearAllMocks()
+    })
 
     it('fires one evaluateRecalibration per distinct exercise in a LIFTING workout', async () => {
         await recalibrateFromTopSet('w-lift')
@@ -117,5 +140,24 @@ describe('recalibrateFromTopSet', () => {
         } finally {
             ;(reca as any).evaluateRecalibration = orig
         }
+    })
+
+    it('persists TM on logged tier; skips persistence on intervention tier', async () => {
+        // First pass: logged tier → setTrainingMax should fire for each exercise
+        tierOverride.value = 'logged'
+        await recalibrateFromTopSet('w-lift')
+        expect(setTrainingMaxCalls).toHaveLength(2)
+        const exercises = setTrainingMaxCalls.map(c => c.exercise).sort()
+        expect(exercises).toEqual(['Bench', 'Squat'])
+        for (const call of setTrainingMaxCalls) {
+            expect(call.source).toBe('recalibration')
+            expect(typeof call.trainingMaxKg).toBe('number')
+        }
+
+        // Second pass: intervention tier → setTrainingMax must NOT fire
+        setTrainingMaxCalls.length = 0
+        tierOverride.value = 'intervention'
+        await recalibrateFromTopSet('w-lift')
+        expect(setTrainingMaxCalls).toHaveLength(0)
     })
 })

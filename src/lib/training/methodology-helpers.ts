@@ -56,6 +56,7 @@ export const calculate531Wave = (
 // ─── Training Max Estimation ─────────────────────────────────────────────────
 
 import { trainingMaxSkill } from '@/lib/skills/domains/strength/training-max-estimation'
+import { getTrainingMax } from '@/lib/actions/training-maxes.actions'
 
 export const estimateTrainingMax = (
     benchmarkWeight: number,
@@ -63,6 +64,32 @@ export const estimateTrainingMax = (
 ): number => {
     if (benchmarkReps <= 0 || benchmarkWeight <= 0) return 0
     return trainingMaxSkill.execute({ weightKg: benchmarkWeight, reps: benchmarkReps }).trainingMax
+}
+
+/**
+ * Resolve a training max for a given exercise, preferring the
+ * stored `profiles.training_maxes[exerciseName]` written by the
+ * recalibration flow, and falling back to the benchmark-derived
+ * estimate (`estimateTrainingMax`) when no stored value exists.
+ *
+ * Async because the stored lookup hits Supabase. Callers in sync
+ * paths should continue to use `estimateTrainingMax` directly.
+ */
+export const resolveTrainingMaxForExercise = async (
+    exerciseName: string,
+    benchmarkWeight: number,
+    benchmarkReps: number,
+): Promise<number> => {
+    try {
+        const stored = await getTrainingMax(exerciseName)
+        if (stored) return stored.trainingMaxKg
+    } catch (err) {
+        console.error(
+            '[methodology-helpers] getTrainingMax failed, falling back to benchmark',
+            err
+        )
+    }
+    return estimateTrainingMax(benchmarkWeight, benchmarkReps)
 }
 
 export const estimate1RM = (weight: number, reps: number): number => {

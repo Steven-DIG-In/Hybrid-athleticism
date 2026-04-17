@@ -63,6 +63,7 @@ describe('evaluateRecalibration — tiered gate', () => {
             previousMax: 100,
             observedMax: 85,
             evidence: { sessionIds: ['s1', 's2', 's3'] },
+            targetEntity: { type: 'training_max', exercise: 'Squat' },
             microcycleId: 'mc-1'
         })
         expect(res.tier).toBe('intervention')
@@ -71,6 +72,10 @@ describe('evaluateRecalibration — tiered gate', () => {
         expect(interventionsLog).toHaveLength(1)
         expect(interventionsLog[0].microcycleId).toBe('mc-1')
         expect(interventionsLog[0].triggerType).toBe('recalibration_prompt')
+        // inputPayload carries exercise + coach so respondToIntervention can persist the TM
+        expect(interventionsLog[0].inputPayload.exercise).toBe('Squat')
+        expect(interventionsLog[0].inputPayload.coach).toBe('strength')
+        expect(interventionsLog[0].inputPayload.observedMax).toBe(85)
         expect(decisionLog).toHaveLength(1)
         expect(decisionLog[0].decisionType).toBe('intervention_fired')
         expect(decisionLog[0].reasoningStructured.interventionId).toBe('i1')

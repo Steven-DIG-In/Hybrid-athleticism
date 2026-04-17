@@ -105,7 +105,11 @@ export async function evaluateRecalibration(
                 previousMax: input.previousMax,
                 observedMax: input.observedMax,
                 driftPct: Number(driftPct.toFixed(4)),
-                evidence: input.evidence
+                evidence: input.evidence,
+                // Captured so respondToIntervention can persist the new TM
+                // on athlete acceptance without re-deriving context.
+                exercise: (input.targetEntity as { exercise?: string } | undefined)?.exercise,
+                coach: input.coach
             }
         })
         if (!result.success) {
