@@ -110,4 +110,19 @@ describe('block-pointer actions', () => {
         const final = await getBlockPointer('meso-1', 1)
         expect(final.next_training_day).toBeLessThanOrEqual(7)
     })
+
+    it('throws when unauthenticated', async () => {
+        const mod: any = await import('@/lib/supabase/server')
+        const client = await mod.createClient()
+        const originalGetUser = client.auth.getUser
+        client.auth.getUser = vi.fn().mockResolvedValue({ data: { user: null } })
+        try {
+            await expect(initBlockPointer('meso-1', 1)).rejects.toThrow('unauthenticated')
+        } finally {
+            // Restore so other tests sharing the mock client aren't affected.
+            client.auth.getUser = originalGetUser
+        }
+    })
+
+    it.todo('coalesces concurrent advances within the same week')
 })
