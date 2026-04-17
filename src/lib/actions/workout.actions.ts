@@ -6,6 +6,7 @@ import type { ActionResult, TodayViewData, DashboardData, WorkoutWithSets } from
 import type { SessionInventory } from '@/lib/types/inventory.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
+import { advanceBlockPointer } from './block-pointer.actions'
 
 /**
  * Get today's scheduled workout with all its sets/exercises.
@@ -180,6 +181,46 @@ export async function completeWorkout(
         generatePerformanceDeltas(workout.session_inventory_id, user.id).catch((err) => {
             console.error('[completeWorkout] performance delta generation failed:', err)
         })
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+
+    // Bug #4/#5 fix: set completed_date so load-scoring aggregates correctly.
+    await supabase
+        .from('workouts')
+        .update({ completed_date: today })
+        .eq('id', workoutId)
+        .eq('user_id', user.id)
+
+    // State transition: session_inventory → 'completed', then advance block_pointer.
+    if (workout.session_inventory_id) {
+        const { data: inventory, error: invReadErr } = await supabase
+            .from('session_inventory')
+            .select('id, mesocycle_id, week_number')
+            .eq('id', workout.session_inventory_id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+        if (invReadErr) {
+            console.error('[completeWorkout] failed to read session_inventory for state transition', invReadErr)
+        } else if (inventory) {
+            const { error: invUpdateErr } = await supabase
+                .from('session_inventory')
+                .update({ status: 'completed' })
+                .eq('id', inventory.id)
+                .eq('user_id', user.id)
+            if (invUpdateErr) {
+                console.error('[completeWorkout] failed to transition session_inventory', invUpdateErr)
+            }
+
+            // Advance block pointer. Any error here is logged — athlete's workout
+            // completion must not fail because of pointer math.
+            try {
+                await advanceBlockPointer(inventory.mesocycle_id, inventory.week_number)
+            } catch (err) {
+                console.error('[completeWorkout] failed to advance block_pointer', err)
+            }
+        }
     }
 
     revalidatePath('/dashboard')
