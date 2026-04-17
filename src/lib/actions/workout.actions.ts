@@ -522,3 +522,54 @@ export async function updateWorkoutDate(
     revalidatePath('/dashboard')
     return { success: true, data: workout }
 }
+
+/**
+ * Start a workout. Rebinds `scheduled_date` to today (so sessions started
+ * off-plan anchor to the day the athlete actually trained) and transitions
+ * the linked `session_inventory` row to `status = 'active'`.
+ *
+ * Does not update exercise_sets or start any timers — those live in the
+ * workout logger. This is a lightweight state transition only.
+ */
+export async function startWorkout(workoutId: string): Promise<ActionResult<Workout>> {
+    const supabase = await createClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return { success: false, error: 'Not authenticated' }
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+
+    const { data: workout, error: updateErr } = await supabase
+        .from('workouts')
+        .update({ scheduled_date: today })
+        .eq('id', workoutId)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+    if (updateErr) {
+        return { success: false, error: updateErr.message }
+    }
+
+    // Transition linked session_inventory row to 'active', if present.
+    if (workout?.session_inventory_id) {
+        const { error: invErr } = await supabase
+            .from('session_inventory')
+            .update({ status: 'active' })
+            .eq('id', workout.session_inventory_id)
+            .eq('user_id', user.id)
+            .select()
+            .single()
+
+        if (invErr) {
+            // Surface in logs but don't fail the start — the workout rebind succeeded.
+            console.error('startWorkout: failed to transition session_inventory', invErr)
+        }
+    }
+
+    revalidatePath('/dashboard')
+    revalidatePath(`/workout/${workoutId}`)
+    return { success: true, data: workout as Workout }
+}
