@@ -391,7 +391,7 @@ export type Database = {
           next_training_day: number
           updated_at: string
           user_id: string
-          week_number: number | null
+          week_number: number
         }
         Insert: {
           id?: string
@@ -399,7 +399,7 @@ export type Database = {
           next_training_day?: number
           updated_at?: string
           user_id: string
-          week_number?: number | null
+          week_number: number
         }
         Update: {
           id?: string
@@ -407,7 +407,7 @@ export type Database = {
           next_training_day?: number
           updated_at?: string
           user_id?: string
-          week_number?: number | null
+          week_number?: number
         }
         Relationships: [
           {
@@ -2764,4 +2764,3 @@ export const Constants = {
     },
   },
 } as const
-

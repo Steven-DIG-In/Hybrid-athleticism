@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS public.block_pointer (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     mesocycle_id UUID NOT NULL REFERENCES public.mesocycles(id) ON DELETE CASCADE,
-    week_number SMALLINT,
+    week_number SMALLINT NOT NULL,
     next_training_day SMALLINT NOT NULL DEFAULT 1,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -183,3 +183,11 @@ DROP POLICY IF EXISTS "Users manage their own off-plan sessions" ON public.off_p
 CREATE POLICY "Users manage their own off-plan sessions"
     ON public.off_plan_sessions FOR ALL
     USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- =============================================================================
+-- STEP 6: Corrective patches (safe to re-run)
+-- =============================================================================
+
+-- Corrective: ensure week_number is NOT NULL
+ALTER TABLE public.block_pointer
+    ALTER COLUMN week_number SET NOT NULL;
