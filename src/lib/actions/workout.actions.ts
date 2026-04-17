@@ -7,6 +7,7 @@ import type { SessionInventory } from '@/lib/types/inventory.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
 import { advanceBlockPointer } from './block-pointer.actions'
+import { recalibrateFromTopSet } from './recalibrate-from-top-set.actions'
 
 /**
  * Get today's scheduled workout with all its sets/exercises.
@@ -222,6 +223,12 @@ export async function completeWorkout(
             }
         }
     }
+
+    // Non-blocking: recalibration signal via agent_activity and interventions.
+    // Next-session prescription weights are NOT auto-updated (Phase 2.5).
+    recalibrateFromTopSet(workoutId).catch(err => {
+        console.error('[completeWorkout] recalibration failed:', err)
+    })
 
     revalidatePath('/dashboard')
     revalidatePath('/workout')
