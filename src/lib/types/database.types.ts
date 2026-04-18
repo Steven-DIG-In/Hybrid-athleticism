@@ -2767,3 +2767,144 @@ export const Constants = {
     },
   },
 } as const
+
+// ─── Named aliases for call-site ergonomics ─────────────────────────────────
+// Derived from the generated Database type so they stay in sync with the
+// schema. Before adding a new alias here, confirm it's not already derivable
+// from Tables<'table_name'> or Enums<'enum_name'> at the call site.
+// Restored 2026-04-18 after a Supabase regeneration clobbered them.
+
+/**
+ * Profile — hand-written to match production call-site assumptions.
+ * Regenerated Supabase types make many fields nullable by default, but the
+ * production code treats onboarding-required fields as non-nullable. Keep in
+ * sync with the schema when onboarding or coach logic changes.
+ */
+export interface Profile {
+    id: string
+    display_name: string | null
+    avatar_url: string | null
+    display_weights_as_percentages: boolean | null
+
+    training_age_years: number | null
+    sex: 'MALE' | 'FEMALE' | string | null
+    primary_goal: MesocycleGoal
+    equipment_access: EquipmentType[]
+    available_days: number
+    bodyweight_kg: number | null
+    benchmark_week_complete: boolean
+
+    onboarding_path: OnboardingPath | null
+    age: number | null
+    height_cm: number | null
+    unit_preference: string
+
+    lifting_experience: ExperienceLevel | null
+    running_experience: ExperienceLevel | null
+    rucking_experience: ExperienceLevel | null
+    rowing_experience: ExperienceLevel | null
+    swimming_experience: ExperienceLevel | null
+    cycling_experience: ExperienceLevel | null
+    conditioning_experience: ExperienceLevel | null
+
+    primary_training_environment: TrainingEnvironment | null
+    equipment_list: string[]
+    equipment_usage_intents: Record<string, EquipmentUsageIntent>
+
+    endurance_modality_preferences: string[]
+    conditioning_style_preferences: string[]
+
+    session_duration_minutes: number
+    two_a_day: TwoADayWillingness
+    time_of_day: TimeOfDayPreference
+
+    work_type: WorkType | null
+    stress_level: StressLevel | null
+    travel_frequency: TravelFrequency | null
+
+    goal_archetype: GoalArchetype | null
+
+    strength_methodology: MethodologyPreference
+    hypertrophy_methodology: MethodologyPreference
+    endurance_methodology: MethodologyPreference
+    transparency: TransparencyPreference
+
+    body_fat_percentage: number | null
+    body_comp_goal: BodyCompGoal | null
+
+    onboarding_completed_at: string | null
+    benchmark_discovery_status: BenchmarkDiscoveryStatus
+
+    has_injuries: boolean
+    movements_to_avoid: string[]
+
+    coaching_team: Array<{ coach: string; priority: number }>
+
+    // Phase 2.5 (A+): persisted training maxes per exercise
+    training_maxes: Record<string, {
+        trainingMaxKg: number
+        updatedAt: string
+        source: 'onboarding' | 'recalibration' | 'intervention_response'
+    }> | null
+
+    preferred_block_duration: number | null
+
+    created_at: string
+    updated_at: string
+}
+export type AthleteInjury = Tables<'athlete_injuries'>
+export type AthleteBenchmark = Tables<'athlete_benchmarks'>
+export type RecentTrainingActivity = Tables<'recent_training_activity'>
+export type Mesocycle = Tables<'mesocycles'>
+export type Microcycle = Tables<'microcycles'>
+export type Workout = Tables<'workouts'>
+export type ExerciseSet = Tables<'exercise_sets'>
+export type CardioLog = Tables<'cardio_logs'>
+export type RuckingLog = Tables<'rucking_logs'>
+export type ConditioningLog = Tables<'conditioning_logs'>
+/**
+ * AICoachIntervention — hand-written to narrow JSONB columns.
+ * `Tables<'ai_coach_interventions'>` types `exercise_swaps` / `volume_adjustments`
+ * as generic `Json`, which breaks consumers that expect structured arrays/maps.
+ * Keep this in sync with the table schema when columns change.
+ */
+export interface AICoachIntervention {
+    id: string
+    microcycle_id: string
+    user_id: string
+    trigger_type: string
+    rationale: string
+    volume_adjustments: Record<string, number> | null
+    exercise_swaps: Array<{ from: string; to: string; reason: string }> | null
+    rir_adjustment: number | null
+    model_used: string | null
+    input_payload: Record<string, unknown> | null
+    raw_response: string | null
+    presented_to_user: boolean
+    user_accepted: boolean | null
+    user_feedback: string | null
+    created_at: string
+}
+
+export type TwoADayWillingness = Enums<'two_a_day_willingness'>
+export type WorkoutModality = Enums<'workout_modality'>
+export type ExperienceLevel = Enums<'experience_level'>
+export type TrainingEnvironment = Enums<'training_environment'>
+export type GoalArchetype = Enums<'goal_archetype'>
+export type InjuryBodyArea = Enums<'injury_body_area'>
+export type InjurySeverity = Enums<'injury_severity'>
+export type WorkType = Enums<'work_type'>
+export type StressLevel = Enums<'stress_level'>
+export type TravelFrequency = Enums<'travel_frequency'>
+export type TimeOfDayPreference = Enums<'time_of_day_preference'>
+export type MethodologyPreference = Enums<'methodology_preference'>
+export type TransparencyPreference = Enums<'transparency_preference'>
+export type BodyCompGoal = Enums<'body_comp_goal'>
+export type EquipmentUsageIntent = Enums<'equipment_usage_intent'>
+export type EquipmentType = Enums<'equipment_type'>
+export type MesocycleGoal = Enums<'mesocycle_goal'>
+export type OnboardingPath = Enums<'onboarding_path'>
+export type BenchmarkDiscoveryStatus = Enums<'benchmark_discovery_status'>
+export type BenchmarkSource = Enums<'benchmark_source'>
+export type PerceivedIntensity = Enums<'perceived_intensity'>
+

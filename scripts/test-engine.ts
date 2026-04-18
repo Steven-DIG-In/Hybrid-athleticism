@@ -128,6 +128,8 @@ const mockProfile: Profile = {
         { coach: 'endurance', priority: 2 },
         { coach: 'conditioning', priority: 3 },
     ],
+    preferred_block_duration: null,
+    training_maxes: {},
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
 }

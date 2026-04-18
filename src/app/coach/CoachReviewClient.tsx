@@ -7,11 +7,12 @@ import { respondToIntervention } from "@/lib/actions/ai-coach.actions"
 import type { AICoachIntervention } from "@/lib/types/database.types"
 
 // Quick mapping for display text
-const TRIGGER_MAP = {
+const TRIGGER_MAP: Record<string, string> = {
     'WEEKLY_REVIEW': 'End of Week Telemetry',
     'RUCK_FATIGUE': 'High CNS Fatigue (Ruck)',
     'RPE_SPIKE': 'Unplanned RPE Spike',
-    'CARDIO_LOAD': 'Cardio Interference'
+    'CARDIO_LOAD': 'Cardio Interference',
+    'recalibration_prompt': 'Training Max Recalibration'
 }
 
 export function CoachReviewClient({ intervention }: { intervention: AICoachIntervention }) {

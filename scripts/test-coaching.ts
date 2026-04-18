@@ -124,6 +124,8 @@ const mockProfile: Profile = {
         { coach: 'endurance', priority: 2 },
         { coach: 'conditioning', priority: 3 },
     ],
+    preferred_block_duration: null,
+    training_maxes: {},
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
 }
@@ -309,7 +311,7 @@ console.log('MULTI-AGENT COACHING ARCHITECTURE — TEST HARNESS')
 console.log('═══════════════════════════════════════════════════════════')
 console.log(`\nAthlete: ${mockProfile.display_name}, ${mockProfile.age}yo, ${mockProfile.bodyweight_kg}kg`)
 console.log(`Goal: ${mockProfile.goal_archetype} | Experience: ${mockProfile.lifting_experience}`)
-console.log(`Equipment: ${mockProfile.equipment_list.join(', ')}`)
+console.log(`Equipment: ${mockProfile.equipment_list?.join(', ') ?? '(none)'}`)
 console.log(`Coaching Team: ${mockCtx.coachingTeam.map(c => `${c.priority}. ${c.coach}`).join(', ')}`)
 console.log(`Injuries: ${mockInjuries.map(i => `${i.body_area} (${i.severity})`).join(', ')}`)
 
