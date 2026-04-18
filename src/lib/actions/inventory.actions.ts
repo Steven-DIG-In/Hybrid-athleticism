@@ -84,13 +84,15 @@ export async function getUnscheduledInventory(
         return { success: false, error: 'Mesocycle not found' }
     }
 
-    // Get all unscheduled inventory sessions (training_day is NULL = unallocated)
+    // Get all sessions without a calendar date — the training_day-model flow
+    // assigns training_day at generation time, so "needs allocation" now means
+    // "no scheduled_date yet" (regardless of training_day state).
     const { data: sessions, error: sessionsError } = await supabase
         .from('session_inventory')
         .select('*')
         .eq('mesocycle_id', mesocycleId)
         .eq('user_id', user.id)
-        .is('training_day', null)
+        .is('scheduled_date', null)
         .order('week_number', { ascending: true })
         .order('session_priority', { ascending: true })
 
