@@ -4,13 +4,13 @@
 
 **Goal:** Build the four Phase 1 training-adherence tiles (`BlockAdherenceHeatmap`, `CoachPromptsInbox`, `CoachBiasTile`, `OffPlanTally`) + their domain drill-downs on `/data/`, plus the analytics layer that feeds them and the block-end/rolling-pattern intervention triggers. Ships a working training-adherence dashboard that closes the feedback loop between prescribed and actual training.
 
-**Architecture:** Derivation layer at `src/lib/analytics/` produces tile data from `performance_deltas`, `session_inventory`, `workouts`, `off_plan_sessions`, `agent_interventions`. Existing `ai-coach.actions.ts` interventions pipeline is reused for coach dialogue (block-end + rolling pattern flags with 7-day per-coach cooldown). One intervention response path writes `user_response` which feeds next-block prescription inputs.
+**Architecture:** Derivation layer at `src/lib/analytics/` produces tile data from `performance_deltas`, `session_inventory`, `workouts`, `off_plan_sessions`, `ai_coach_interventions`. Existing `ai-coach.actions.ts` interventions pipeline is reused for coach dialogue (block-end + rolling pattern flags with 7-day per-coach cooldown). One intervention response path writes `user_response` which feeds next-block prescription inputs.
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript 5, Supabase, Vitest 4, Tailwind 4. No new deps.
 
 **Spec reference:** `docs/superpowers/specs/2026-04-20-metrics-dashboard-health-extension-design.md` (training-adherence half)
 
-**Dependencies:** Migration 016 from Plan 2 (or a compatible renumbered version) is required for `agent_interventions` column additions, `off_plan_sessions` table, and `performance_deltas.delta_magnitude_pct`. If Plan 2 has not shipped yet, this plan duplicates the training-adherence subset of 016 as a standalone migration — see Task 1.
+**Dependencies:** Migration 016 (`016_metrics_dashboard.sql`) is already applied — see `docs/superpowers/specs/2026-04-20-metrics-schema-audit.md`. It provides the additive columns on `ai_coach_interventions`. No new migration for this plan. `off_plan_sessions` already existed in the live schema; `performance_deltas` is per-exercise (no aggregate column) so analytics derive magnitudes in code — see Task 1b for the helpers.
 
 **Known parallel dependency:** `/coach/` route currently shows "all systems nominal" — effectively dead. The `CoachPromptsInbox` tile links to `/coach/` for review + response. That tile ships but will show "Review in Coach tab (under repair)" until `/coach/` is restored.
 
@@ -22,8 +22,7 @@
 
 ### New files
 
-**Migration (only if Plan 2 hasn't shipped):**
-- `supabase/migrations/016_training_adherence.sql` — subset: agent_interventions additions, off_plan_sessions table, performance_deltas.delta_magnitude_pct. **Skip if Plan 2's 016 is already applied.**
+**Migration:** None required (`016_metrics_dashboard.sql` already applied — see schema audit).
 
 **Analytics:**
 - `src/lib/analytics/block-adherence.ts`
@@ -65,96 +64,183 @@
 
 ---
 
-## Task 1: Confirm migration state; add stub migration if Plan 2 not merged
+## Task 1: Confirm migration 016 is already applied and schema audit observations
+
+> **Schema audit (2026-04-20):** See `docs/superpowers/specs/2026-04-20-metrics-schema-audit.md`. Migration 016 was applied during the schema audit branch. This plan starts from a state where:
+> - `ai_coach_interventions` already existed and received four additive columns: `coach_domain`, `pattern_signal`, `user_response` (enum: keep|harder|recalibrate), `needs_retry`. The legacy LLM-output columns (`rationale`, `volume_adjustments`, `exercise_swaps`, `rir_adjustment`, `model_used`, `input_payload`, `raw_response`, `presented_to_user`, `user_accepted`, `user_feedback`, `microcycle_id`) remain. Block-end and rolling-pattern inserts leave those legacy columns null.
+> - `off_plan_sessions` already existed (same shape as originally planned).
+> - `performance_deltas` is **per-exercise**, not per-session. Columns: `id, user_id, session_inventory_id, exercise_name, prescribed_weight, actual_weight, prescribed_reps, actual_reps, prescribed_rpe, actual_rpe, delta_classification text`. No `delta_pct` column exists; analytics in this plan **compute delta_pct in code** per-exercise and roll up per-session.
+> - `session_inventory` has `modality text` (this plan's `coach_domain` concept derives from it via `modalityToCoachDomain(...)`) plus `training_day`, `session_slot`, `status`. There's no direct `coach_domain` column. The live model has `mesocycles` (multi-week blocks) and `microcycles` (weeks); `training_day` is ordinal within a microcycle.
 
 **Files:**
-- Optional: `supabase/migrations/016_training_adherence.sql`
+- Read: `supabase/migrations/016_metrics_dashboard.sql`
+- Read: `docs/superpowers/specs/2026-04-20-metrics-schema-audit.md`
 
-- [ ] **Step 1: Check current schema**
+- [ ] **Step 1: Verify the additive columns are on `ai_coach_interventions`**
 
 Run:
 ```bash
 cd "/Users/steven/Vibe Projects/hybrid-athleticism"
-grep -l "agent_interventions\|off_plan_sessions" supabase/migrations/*.sql
+grep -E "coach_domain|pattern_signal|user_response|needs_retry" src/lib/types/database.types.ts | head -10
 ```
+Expected: all four column names appear under `ai_coach_interventions`.
 
-If Plan 2's `016_metrics_dashboard.sql` exists, skip to Task 2.
-
-- [ ] **Step 2: If Plan 2 not merged, write subset migration**
-
-```sql
--- supabase/migrations/016_training_adherence.sql
--- Subset for standalone training-adherence ship; superseded by Plan 2 migration if that merges first.
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agent_interventions') THEN
-    CREATE TABLE agent_interventions (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-      coach_domain text NOT NULL,
-      trigger_type text NOT NULL CHECK (trigger_type IN ('block_end','rolling_pattern','recalibration_prompt')),
-      pattern_signal jsonb,
-      message text NOT NULL,
-      user_response text CHECK (user_response IN ('keep','harder','recalibrate')),
-      responded_at timestamptz,
-      needs_retry boolean DEFAULT false,
-      created_at timestamptz DEFAULT now()
-    );
-    ALTER TABLE agent_interventions ENABLE ROW LEVEL SECURITY;
-    CREATE POLICY agent_interventions_owner ON agent_interventions FOR ALL
-      USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-  ELSE
-    ALTER TABLE agent_interventions ADD COLUMN IF NOT EXISTS coach_domain text;
-    ALTER TABLE agent_interventions ADD COLUMN IF NOT EXISTS trigger_type text;
-    ALTER TABLE agent_interventions ADD COLUMN IF NOT EXISTS pattern_signal jsonb;
-    ALTER TABLE agent_interventions ADD COLUMN IF NOT EXISTS user_response text;
-    ALTER TABLE agent_interventions ADD COLUMN IF NOT EXISTS needs_retry boolean DEFAULT false;
-  END IF;
-END $$;
-
-CREATE TABLE IF NOT EXISTS off_plan_sessions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  logged_at timestamptz NOT NULL DEFAULT now(),
-  modality text NOT NULL,
-  duration_minutes int NOT NULL,
-  rpe int,
-  notes text,
-  count_toward_load boolean NOT NULL DEFAULT true,
-  linked_domain text,
-  created_at timestamptz DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_off_plan_sessions_user_logged ON off_plan_sessions(user_id, logged_at DESC);
-ALTER TABLE off_plan_sessions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY off_plan_sessions_owner ON off_plan_sessions FOR ALL
-  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
-DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns
-             WHERE table_name = 'performance_deltas' AND column_name = 'delta_pct')
-     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
-             WHERE table_name = 'performance_deltas' AND column_name = 'delta_magnitude_pct') THEN
-    ALTER TABLE performance_deltas
-      ADD COLUMN delta_magnitude_pct numeric
-      GENERATED ALWAYS AS (ABS(delta_pct)) STORED;
-  END IF;
-END $$;
-```
-
-- [ ] **Step 3: Apply + regenerate types**
+- [ ] **Step 2: Verify performance_deltas shape (no delta_pct column)**
 
 Run:
 ```bash
-supabase migration up
-supabase gen types typescript --local > src/lib/types/database.types.ts
+grep -A 30 "performance_deltas:" src/lib/types/database.types.ts | head -40
+```
+Expected: columns match the audit doc (`session_inventory_id`, `exercise_name`, `prescribed_*`/`actual_*` pairs, `delta_classification`). **No `delta_pct`.** Analytics tasks below derive this.
+
+- [ ] **Step 3: No commit — verification only**
+
+---
+
+## Task 1b: Add `modalityToCoachDomain` helper (shared across analytics)
+
+**Files:**
+- Create: `src/lib/analytics/shared/coach-domain.ts`
+- Create: `src/lib/analytics/shared/__tests__/coach-domain.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// src/lib/analytics/shared/__tests__/coach-domain.test.ts
+import { describe, it, expect } from 'vitest'
+import { modalityToCoachDomain } from '../coach-domain'
+
+describe('modalityToCoachDomain', () => {
+  it('maps session_inventory.modality values to coach domain', () => {
+    expect(modalityToCoachDomain('strength')).toBe('strength')
+    expect(modalityToCoachDomain('hypertrophy')).toBe('hypertrophy')
+    expect(modalityToCoachDomain('endurance')).toBe('endurance')
+    expect(modalityToCoachDomain('run')).toBe('endurance')
+    expect(modalityToCoachDomain('ride')).toBe('endurance')
+    expect(modalityToCoachDomain('conditioning')).toBe('conditioning')
+    expect(modalityToCoachDomain('metcon')).toBe('conditioning')
+    expect(modalityToCoachDomain('mobility')).toBe('mobility')
+    expect(modalityToCoachDomain('recovery')).toBe('recovery')
+    expect(modalityToCoachDomain('unknown')).toBeNull()
+  })
+})
 ```
 
-- [ ] **Step 4: Commit (if migration written)**
+- [ ] **Step 2: Implement**
+
+```ts
+// src/lib/analytics/shared/coach-domain.ts
+export type CoachDomain = 'strength' | 'hypertrophy' | 'endurance' | 'conditioning' | 'mobility' | 'recovery'
+
+export function modalityToCoachDomain(modality: string): CoachDomain | null {
+  switch (modality) {
+    case 'strength': return 'strength'
+    case 'hypertrophy': return 'hypertrophy'
+    case 'endurance':
+    case 'run':
+    case 'ride': return 'endurance'
+    case 'conditioning':
+    case 'metcon': return 'conditioning'
+    case 'mobility': return 'mobility'
+    case 'recovery': return 'recovery'
+    default: return null
+  }
+}
+
+/**
+ * Computes a per-exercise delta_pct from prescribed/actual values in
+ * performance_deltas. Prefers weight, falls back to reps, then RPE.
+ * Returns null when prescribed is missing or zero (undefined baseline).
+ */
+export function computeExerciseDeltaPct(row: {
+  prescribed_weight: number | null
+  actual_weight: number | null
+  prescribed_reps: number | null
+  actual_reps: number | null
+  prescribed_rpe: number | null
+  actual_rpe: number | null
+}): number | null {
+  if (row.prescribed_weight && row.actual_weight != null) {
+    if (row.prescribed_weight === 0) return null
+    return ((row.actual_weight - row.prescribed_weight) / row.prescribed_weight) * 100
+  }
+  if (row.prescribed_reps && row.actual_reps != null) {
+    if (row.prescribed_reps === 0) return null
+    return ((row.actual_reps - row.prescribed_reps) / row.prescribed_reps) * 100
+  }
+  if (row.prescribed_rpe && row.actual_rpe != null) {
+    if (row.prescribed_rpe === 0) return null
+    return ((row.actual_rpe - row.prescribed_rpe) / row.prescribed_rpe) * 100
+  }
+  return null
+}
+
+/**
+ * Returns per-session average delta_pct for a user + coach domain, ordered
+ * newest first. Each session's delta_pct is the mean of per-exercise deltas
+ * (with sign preserved). `session_inventory_id` is included so UI can group /
+ * navigate to the session. Used by domain pages, pattern detector, tests.
+ *
+ * Performs the JOIN that the raw `performance_deltas` table can't express
+ * directly (no delta_pct, no coach_domain on the row).
+ */
+export async function getRecentCoachDeltaSeries(
+  userId: string,
+  coach: CoachDomain,
+  opts: { limit?: number } = {},
+): Promise<Array<{ created_at: string; delta_pct: number; session_inventory_id: string }>> {
+  const { createClient } = await import('@/lib/supabase/server')
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('performance_deltas')
+    .select(`
+      session_inventory_id, created_at,
+      prescribed_weight, actual_weight,
+      prescribed_reps, actual_reps,
+      prescribed_rpe, actual_rpe,
+      session_inventory:session_inventory_id (modality)
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  const bySession = new Map<string, { created_at: string; deltas: number[] }>()
+  for (const r of (data ?? []) as any[]) {
+    const modality = r.session_inventory?.modality
+    if (!modality || modalityToCoachDomain(modality) !== coach) continue
+    const d = computeExerciseDeltaPct(r)
+    if (d == null) continue
+    const bucket = bySession.get(r.session_inventory_id) ?? { created_at: r.created_at, deltas: [] }
+    bucket.deltas.push(d)
+    bySession.set(r.session_inventory_id, bucket)
+  }
+  const series = Array.from(bySession.entries()).map(([session_inventory_id, b]) => ({
+    session_inventory_id,
+    created_at: b.created_at,
+    delta_pct: b.deltas.reduce((a, c) => a + c, 0) / b.deltas.length,
+  })).sort((a, b) => b.created_at.localeCompare(a.created_at))
+  return opts.limit ? series.slice(0, opts.limit) : series
+}
+```
+
+> **Helper used by downstream tasks:** `getRecentCoachDeltaSeries(userId, coach, { limit })` returns `{ created_at, delta_pct, session_inventory_id }[]`. Domain pages (Tasks 16, 17), integration tests (Task 18), and the rolling-pattern trigger (Task 6) should all consume this helper instead of querying `performance_deltas` directly for `delta_pct`/`coach_domain`/`workout_id`. The `detectPattern` function signature stays compatible — it takes `{ delta_pct, workout_id }[]`, and callers can pass `{ delta_pct: x.delta_pct, workout_id: x.session_inventory_id }` (the `workout_id` field name is a vestigial label for the session reference; semantics are unchanged).
+
+- [ ] **Step 3: Run tests — expect pass**
+
+Run: `npx vitest run src/lib/analytics/shared/__tests__/coach-domain.test.ts`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/016_training_adherence.sql src/lib/types/database.types.ts
-git commit -m "feat(migration): training-adherence tables (standalone subset)"
+git add src/lib/analytics/shared/
+git commit -m "feat(analytics): modalityToCoachDomain + computeExerciseDeltaPct helpers"
 ```
+
+---
+
+> **Analytics-wide note:** All tasks below that previously assumed `performance_deltas.delta_pct` or `performance_deltas.coach_domain` must JOIN `performance_deltas → session_inventory (on session_inventory_id) → session_inventory.modality`, then derive `coach_domain` via `modalityToCoachDomain(modality)` and `delta_pct` via `computeExerciseDeltaPct(row)`. For per-session rollup, aggregate per `session_inventory_id` (one session has N exercises); the session's delta is the mean of absolute per-exercise deltas. Tasks below show the updated query shape.
+
+> **Intervention-save note:** `saveCoachIntervention` in `src/lib/actions/ai-coach.actions.ts` must be extended to accept the new columns and write them alongside existing LLM-output columns. Block-end / rolling-pattern callers pass: `rationale` = the summary message, `trigger_type`, `coach_domain`, `pattern_signal`, and leave LLM-specific columns (`model_used`, `input_payload`, `raw_response`, `volume_adjustments`, `exercise_swaps`, `rir_adjustment`) null. The `microcycle_id NOT NULL` constraint on the existing table means new callers must also supply the active `microcycle_id` — fetch it from `microcycles` via `user_id + is_active` (or use `block_pointer.mesocycle_id + week_number` → `microcycles.id`).
 
 ---
 
@@ -237,26 +323,49 @@ export function rollupHeatmapCells(rows: SessionRow[]): HeatmapCell[] {
   })
 }
 
-export async function currentBlockHeatmap(userId: string, blockId: string) {
+export async function currentBlockHeatmap(
+  userId: string,
+  mesocycleId: string,
+  weekNumber: number,
+) {
   const supabase = await createClient()
+  // session_inventory has (mesocycle_id, week_number); no block_id column.
   const { data: inv } = await supabase
     .from('session_inventory')
-    .select('id, training_day, session_slot, status, workout_id')
-    .eq('user_id', userId).eq('block_id', blockId)
+    .select('id, training_day, session_slot, status')
+    .eq('user_id', userId)
+    .eq('mesocycle_id', mesocycleId)
+    .eq('week_number', weekNumber)
     .order('training_day', { ascending: true })
 
-  const workoutIds = (inv ?? []).map(i => i.workout_id).filter(Boolean) as string[]
-  const { data: deltas } = workoutIds.length ? await supabase
-    .from('performance_deltas').select('workout_id, delta_magnitude_pct')
-    .in('workout_id', workoutIds) : { data: [] as any[] }
+  // performance_deltas is per-exercise, linked by session_inventory_id.
+  // Compute per-session delta_magnitude_pct as mean of |per-exercise delta_pct|.
+  const invIds = (inv ?? []).map(i => i.id)
+  const { data: deltaRows } = invIds.length ? await supabase
+    .from('performance_deltas')
+    .select('session_inventory_id, prescribed_weight, actual_weight, prescribed_reps, actual_reps, prescribed_rpe, actual_rpe')
+    .in('session_inventory_id', invIds) : { data: [] as any[] }
+
+  const { computeExerciseDeltaPct } = await import('./shared/coach-domain')
+  const magnitudesBySession = new Map<string, number[]>()
+  for (const r of deltaRows ?? []) {
+    const d = computeExerciseDeltaPct(r)
+    if (d == null) continue
+    const list = magnitudesBySession.get(r.session_inventory_id) ?? []
+    list.push(Math.abs(d))
+    magnitudesBySession.set(r.session_inventory_id, list)
+  }
 
   const rows: SessionRow[] = (inv ?? []).map(i => {
-    const dMatch = (deltas ?? []).find(d => d.workout_id === i.workout_id)
+    const mags = magnitudesBySession.get(i.id)
+    const delta_magnitude_pct = mags && mags.length
+      ? mags.reduce((a, b) => a + b, 0) / mags.length
+      : null
     return {
       training_day: i.training_day,
       session_slot: i.session_slot,
       status: i.status,
-      delta_magnitude_pct: dMatch?.delta_magnitude_pct ?? null,
+      delta_magnitude_pct,
       session_id: i.id,
     }
   })
@@ -386,17 +495,29 @@ export function isCooldownClear(args: { lastFiredAt: string | null; now: Date })
 export async function allCoachesRAG(userId: string) {
   const supabase = await createClient()
   const sinceIso = new Date(Date.now() - 21 * 24 * 3600 * 1000).toISOString()
+  // performance_deltas has no coach_domain; derive via JOIN to session_inventory.
   const { data } = await supabase
     .from('performance_deltas')
-    .select('coach_domain, delta_magnitude_pct, created_at')
+    .select(`
+      prescribed_weight, actual_weight,
+      prescribed_reps, actual_reps,
+      prescribed_rpe, actual_rpe,
+      created_at,
+      session_inventory:session_inventory_id (modality)
+    `)
     .eq('user_id', userId).gte('created_at', sinceIso)
 
+  const { modalityToCoachDomain, computeExerciseDeltaPct } = await import('./shared/coach-domain')
   const byCoach = new Map<string, number[]>()
-  for (const r of data ?? []) {
-    if (r.delta_magnitude_pct == null) continue
-    const list = byCoach.get(r.coach_domain) ?? []
-    list.push(r.delta_magnitude_pct)
-    byCoach.set(r.coach_domain, list)
+  for (const r of (data ?? []) as any[]) {
+    const modality = r.session_inventory?.modality
+    const coach = modality ? modalityToCoachDomain(modality) : null
+    if (!coach) continue
+    const d = computeExerciseDeltaPct(r)
+    if (d == null) continue
+    const list = byCoach.get(coach) ?? []
+    list.push(Math.abs(d))
+    byCoach.set(coach, list)
   }
   const result: Record<string, RAG> = {}
   for (const [coach, deltas] of byCoach) result[coach] = classifyRAG(deltas)
@@ -737,20 +858,18 @@ export function shouldFireRollingPattern(args: {
   return isCooldownClear({ lastFiredAt: args.lastFiredAt, now: args.now })
 }
 
-export async function evaluateAndFirePattern(userId: string, coachDomain: string) {
+export async function evaluateAndFirePattern(userId: string, coachDomain: CoachDomain) {
   const supabase = await createClient()
-  const { data: deltas } = await supabase
-    .from('performance_deltas')
-    .select('delta_pct, workout_id, created_at')
-    .eq('user_id', userId).eq('coach_domain', coachDomain)
-    .order('created_at', { ascending: false }).limit(5)
+  // Derive delta_pct + coach filter via JOIN to session_inventory (helper).
+  const { getRecentCoachDeltaSeries } = await import('@/lib/analytics/shared/coach-domain')
+  const series = await getRecentCoachDeltaSeries(userId, coachDomain, { limit: 5 })
 
   const pattern = detectPattern(
-    (deltas ?? []).map(d => ({ delta_pct: d.delta_pct, workout_id: d.workout_id }))
+    series.map(d => ({ delta_pct: d.delta_pct, workout_id: d.session_inventory_id })),
   )
 
   const { data: lastInt } = await supabase
-    .from('agent_interventions')
+    .from('ai_coach_interventions')
     .select('created_at')
     .eq('user_id', userId).eq('coach_domain', coachDomain)
     .eq('trigger_type', 'rolling_pattern')
@@ -775,19 +894,65 @@ export async function evaluateAndFirePattern(userId: string, coachDomain: string
 
 - [ ] **Step 5: Extend `ai-coach.actions.ts`**
 
-Open `src/lib/actions/ai-coach.actions.ts`. Update `saveCoachIntervention` to accept new optional fields and persist them. Add to its input type:
+Open `src/lib/actions/ai-coach.actions.ts`. Review the existing `saveCoachIntervention` signature (currently writes to `ai_coach_interventions` with LLM-output fields). Add a second overload / variant for pattern-based callers. Field mapping to the live `ai_coach_interventions` table:
+
+| Input (new variant) | `ai_coach_interventions` column |
+| --- | --- |
+| `coach_domain` | `coach_domain` (new, added by migration 016) |
+| `trigger_type` (`block_end`\|`rolling_pattern`\|`recalibration_prompt`) | `trigger_type` (existing; already plain text) |
+| `message` | `rationale` (existing NOT NULL) |
+| `pattern_signal` | `pattern_signal` (new, added by migration 016) |
+
+The block-end / rolling-pattern callers must also supply `microcycle_id` because the existing column is `NOT NULL`. Fetch the active microcycle for the user:
 
 ```ts
-// Add to saveCoachIntervention input:
+const { data: { user } } = await supabase.auth.getUser()
+if (!user) return { ok: false, error: 'unauthenticated' }
+const { data: pointer } = await supabase
+  .from('block_pointer')
+  .select('mesocycle_id, week_number')
+  .eq('user_id', user.id)
+  .order('updated_at', { ascending: false })
+  .limit(1).maybeSingle()
+if (!pointer) return { ok: false, error: 'no active block' }
+const { data: microcycle } = await supabase
+  .from('microcycles')
+  .select('id')
+  .eq('mesocycle_id', pointer.mesocycle_id)
+  .eq('week_number', pointer.week_number)
+  .maybeSingle()
+if (!microcycle) return { ok: false, error: 'microcycle not found' }
+```
+
+Then insert (LLM-specific fields stay null for pattern-based interventions):
+
+```ts
 export interface SaveCoachInterventionInput {
   coach_domain: string
   trigger_type: 'block_end' | 'rolling_pattern' | 'recalibration_prompt'
   message: string
   pattern_signal?: Record<string, unknown>
 }
+
+export async function saveCoachIntervention(input: SaveCoachInterventionInput) {
+  // ... microcycle lookup as above ...
+  const { error } = await supabase.from('ai_coach_interventions').insert({
+    user_id: user.id,
+    microcycle_id: microcycle.id,
+    coach_domain: input.coach_domain,
+    trigger_type: input.trigger_type,
+    rationale: input.message,         // message maps to the existing rationale column
+    pattern_signal: input.pattern_signal ?? null,
+    // LLM-specific columns intentionally omitted (nullable):
+    // volume_adjustments, exercise_swaps, rir_adjustment, model_used,
+    // input_payload, raw_response, presented_to_user, user_accepted, user_feedback.
+  })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
 ```
 
-Then in the implementation, pass `coach_domain`, `trigger_type`, `pattern_signal` to the `.insert({...})` call. Keep existing call sites compatible (if the function was previously called with a different signature, update call sites accordingly — grep for usages: `grep -r "saveCoachIntervention" src/`).
+Keep any pre-existing LLM-authored call sites working — if the file already has a `saveCoachIntervention` function with a different signature, rename it (`saveLLMCoachIntervention`) and keep both. Grep for call sites: `grep -rn "saveCoachIntervention" src/`.
 
 - [ ] **Step 6: Run tests — expect pass**
 
@@ -828,7 +993,7 @@ await fireBlockEndInterventions(userId, completedBlockId)
 
 - [ ] **Step 3: Manual verify**
 
-Seed a block with a few completed workouts and performance_deltas. Trigger block completion (through the app, or by calling the action directly from a script). Confirm rows appear in `agent_interventions` for coaches with mean magnitude >5%.
+Seed a block with a few completed workouts and performance_deltas. Trigger block completion (through the app, or by calling the action directly from a script). Confirm rows appear in `ai_coach_interventions` for coaches with mean magnitude >5%.
 
 - [ ] **Step 4: Commit**
 
@@ -1402,16 +1567,15 @@ const { data: { user } } = await supabase.auth.getUser()
 if (!user) redirect('/auth/sign-in')
 
 const coachDomain = 'strength' // or 'endurance', 'recovery' per file
-const { data: deltas } = await supabase
-  .from('performance_deltas')
-  .select('delta_pct, workout_id, created_at')
-  .eq('user_id', user.id).eq('coach_domain', coachDomain)
-  .order('created_at', { ascending: false }).limit(20)
+const { getRecentCoachDeltaSeries } = await import('@/lib/analytics/shared/coach-domain')
+const series = await getRecentCoachDeltaSeries(user.id, coachDomain, { limit: 20 })
 
-const points = (deltas ?? []).slice().reverse().map(d => ({
+const points = series.slice().reverse().map(d => ({
   date: d.created_at.slice(0, 10), delta_pct: d.delta_pct,
 }))
-const flag = detectPattern((deltas ?? []).map(d => ({ delta_pct: d.delta_pct, workout_id: d.workout_id })))
+const flag = detectPattern(
+  series.map(d => ({ delta_pct: d.delta_pct, workout_id: d.session_inventory_id })),
+)
 
 // Render alongside existing content:
 <>
@@ -1454,16 +1618,16 @@ export default async function Page() {
     .from('conditioning_logs').select('*')
     .eq('user_id', user.id).order('created_at', { ascending: false }).limit(50)
 
-  const { data: deltas } = await supabase
-    .from('performance_deltas')
-    .select('delta_pct, workout_id, created_at')
-    .eq('user_id', user.id).eq('coach_domain', 'conditioning')
-    .order('created_at', { ascending: false }).limit(20)
+  // performance_deltas has no coach_domain / delta_pct on the row — use the helper.
+  const { getRecentCoachDeltaSeries } = await import('@/lib/analytics/shared/coach-domain')
+  const series = await getRecentCoachDeltaSeries(user.id, 'conditioning', { limit: 20 })
 
-  const points = (deltas ?? []).slice().reverse().map(d => ({
+  const points = series.slice().reverse().map(d => ({
     date: d.created_at.slice(0, 10), delta_pct: d.delta_pct,
   }))
-  const flag = detectPattern((deltas ?? []).map(d => ({ delta_pct: d.delta_pct, workout_id: d.workout_id })))
+  const flag = detectPattern(
+    series.map(d => ({ delta_pct: d.delta_pct, workout_id: d.session_inventory_id })),
+  )
 
   return (
     <div className="p-4 space-y-4">
@@ -1523,42 +1687,71 @@ import { evaluateAndFirePattern } from '../rolling-pattern-trigger'
 describe('workout → rolling-pattern intervention', () => {
   const supabase = createClient()
   const userId = '00000000-0000-0000-0000-000000000001'
-  const coach = 'endurance'
+  const coach = 'endurance' as const
+
+  /**
+   * Real schema: performance_deltas has no delta_pct / coach_domain.
+   * To fire a pattern for a coach, we need 3 session_inventory rows with
+   * matching modality ('run' maps to 'endurance' via modalityToCoachDomain)
+   * and each session needs performance_deltas rows whose prescribed/actual
+   * values yield the target delta_pct.
+   *
+   * Helper creates a session with a single-exercise delta of -12% (prescribed
+   * 100 reps, actual 88 reps).
+   */
+  async function seedSession(idx: number) {
+    const sessionId = `00000000-0000-0000-0000-00000000100${idx}`
+    await supabase.from('session_inventory').insert({
+      id: sessionId,
+      user_id: userId,
+      mesocycle_id: '00000000-0000-0000-0000-000000000099',
+      week_number: 1,
+      training_day: idx,
+      session_slot: 1,
+      modality: 'run',
+      name: `run ${idx}`,
+      status: 'completed',
+    })
+    await supabase.from('performance_deltas').insert({
+      user_id: userId,
+      session_inventory_id: sessionId,
+      exercise_name: 'long run',
+      prescribed_reps: 100,
+      actual_reps: 88,
+      delta_classification: 'missed_reps',
+      created_at: new Date(Date.now() - (10 - idx) * 60_000).toISOString(),
+    })
+    return sessionId
+  }
 
   beforeEach(async () => {
-    await supabase.from('agent_interventions')
+    await supabase.from('ai_coach_interventions')
       .delete().eq('user_id', userId).eq('coach_domain', coach)
-    await supabase.from('performance_deltas')
-      .delete().eq('user_id', userId).eq('coach_domain', coach)
+    await supabase.from('performance_deltas').delete().eq('user_id', userId)
+    await supabase.from('session_inventory').delete().eq('user_id', userId)
   })
 
   it('3 consecutive -12% deltas fire an intervention', async () => {
-    for (const w of ['w1', 'w2', 'w3']) {
-      await supabase.from('performance_deltas').insert({
-        user_id: userId, coach_domain: coach,
-        workout_id: w, delta_pct: -12, delta_magnitude_pct: 12,
-      })
-    }
+    await seedSession(1); await seedSession(2); await seedSession(3)
     const res = await evaluateAndFirePattern(userId, coach)
     expect(res.fired).toBe(true)
 
-    const { data } = await supabase.from('agent_interventions')
+    const { data } = await supabase.from('ai_coach_interventions')
       .select('*').eq('user_id', userId).eq('coach_domain', coach)
     expect(data).toHaveLength(1)
     expect(data![0].trigger_type).toBe('rolling_pattern')
   })
 
   it('cooldown blocks second fire within 7 days', async () => {
-    await supabase.from('agent_interventions').insert({
-      user_id: userId, coach_domain: coach, trigger_type: 'rolling_pattern',
-      message: 'existing', created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+    await supabase.from('ai_coach_interventions').insert({
+      user_id: userId,
+      coach_domain: coach,
+      trigger_type: 'rolling_pattern',
+      rationale: 'existing',
+      microcycle_id: '00000000-0000-0000-0000-000000000088', // valid UUID; presence matters
+      created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
     })
-    for (const w of ['w1', 'w2', 'w3']) {
-      await supabase.from('performance_deltas').insert({
-        user_id: userId, coach_domain: coach,
-        workout_id: w, delta_pct: -12, delta_magnitude_pct: 12,
-      })
-    }
+    await seedSession(1); await seedSession(2); await seedSession(3)
     const res = await evaluateAndFirePattern(userId, coach)
     expect(res.fired).toBe(false)
   })
