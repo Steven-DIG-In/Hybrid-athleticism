@@ -202,12 +202,15 @@ export type Database = {
       }
       ai_coach_interventions: {
         Row: {
+          coach_domain: string | null
           created_at: string
           exercise_swaps: Json | null
           id: string
           input_payload: Json | null
           microcycle_id: string
           model_used: string | null
+          needs_retry: boolean | null
+          pattern_signal: Json | null
           presented_to_user: boolean | null
           rationale: string
           raw_response: string | null
@@ -216,15 +219,19 @@ export type Database = {
           user_accepted: boolean | null
           user_feedback: string | null
           user_id: string
+          user_response: string | null
           volume_adjustments: Json | null
         }
         Insert: {
+          coach_domain?: string | null
           created_at?: string
           exercise_swaps?: Json | null
           id?: string
           input_payload?: Json | null
           microcycle_id: string
           model_used?: string | null
+          needs_retry?: boolean | null
+          pattern_signal?: Json | null
           presented_to_user?: boolean | null
           rationale: string
           raw_response?: string | null
@@ -233,15 +240,19 @@ export type Database = {
           user_accepted?: boolean | null
           user_feedback?: string | null
           user_id: string
+          user_response?: string | null
           volume_adjustments?: Json | null
         }
         Update: {
+          coach_domain?: string | null
           created_at?: string
           exercise_swaps?: Json | null
           id?: string
           input_payload?: Json | null
           microcycle_id?: string
           model_used?: string | null
+          needs_retry?: boolean | null
+          pattern_signal?: Json | null
           presented_to_user?: boolean | null
           rationale?: string
           raw_response?: string | null
@@ -250,6 +261,7 @@ export type Database = {
           user_accepted?: boolean | null
           user_feedback?: string | null
           user_id?: string
+          user_response?: string | null
           volume_adjustments?: Json | null
         }
         Relationships: [
@@ -418,6 +430,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      body_composition_measurements: {
+        Row: {
+          body_fat_pct: number | null
+          created_at: string | null
+          id: string
+          lean_mass_kg: number | null
+          measured_on: string
+          measurements: Json | null
+          method: string
+          notes: string | null
+          user_id: string
+          weight_kg: number | null
+        }
+        Insert: {
+          body_fat_pct?: number | null
+          created_at?: string | null
+          id?: string
+          lean_mass_kg?: number | null
+          measured_on: string
+          measurements?: Json | null
+          method: string
+          notes?: string | null
+          user_id: string
+          weight_kg?: number | null
+        }
+        Update: {
+          body_fat_pct?: number | null
+          created_at?: string | null
+          id?: string
+          lean_mass_kg?: number | null
+          measured_on?: string
+          measurements?: Json | null
+          method?: string
+          notes?: string | null
+          user_id?: string
+          weight_kg?: number | null
+        }
+        Relationships: []
       }
       cardio_logs: {
         Row: {
@@ -670,6 +721,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      doctor_reports: {
+        Row: {
+          generated_at: string
+          id: string
+          pdf_file_path: string | null
+          snapshot_json: Json
+          user_id: string
+          window_end: string
+          window_preset: string
+          window_start: string
+        }
+        Insert: {
+          generated_at?: string
+          id?: string
+          pdf_file_path?: string | null
+          snapshot_json: Json
+          user_id: string
+          window_end: string
+          window_preset: string
+          window_start: string
+        }
+        Update: {
+          generated_at?: string
+          id?: string
+          pdf_file_path?: string | null
+          snapshot_json?: Json
+          user_id?: string
+          window_end?: string
+          window_preset?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       exercise_history: {
         Row: {
@@ -1092,6 +1176,102 @@ export type Database = {
           },
         ]
       }
+      garmin_credentials: {
+        Row: {
+          connected_at: string | null
+          last_sync_at: string | null
+          last_sync_status: string | null
+          session_expires_at: string | null
+          session_token_encrypted: string | null
+          user_id: string
+          vault_secret_id_email: string | null
+          vault_secret_id_password: string | null
+        }
+        Insert: {
+          connected_at?: string | null
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          session_expires_at?: string | null
+          session_token_encrypted?: string | null
+          user_id: string
+          vault_secret_id_email?: string | null
+          vault_secret_id_password?: string | null
+        }
+        Update: {
+          connected_at?: string | null
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          session_expires_at?: string | null
+          session_token_encrypted?: string | null
+          user_id?: string
+          vault_secret_id_email?: string | null
+          vault_secret_id_password?: string | null
+        }
+        Relationships: []
+      }
+      garmin_daily: {
+        Row: {
+          active_kcal: number | null
+          body_battery_end: number | null
+          body_battery_max: number | null
+          body_battery_min: number | null
+          body_battery_start: number | null
+          date: string
+          hrv_morning_status: string | null
+          hrv_overnight_avg: number | null
+          resting_hr: number | null
+          sleep_awake_min: number | null
+          sleep_deep_min: number | null
+          sleep_light_min: number | null
+          sleep_rem_min: number | null
+          sleep_score: number | null
+          sleep_total_min: number | null
+          steps: number | null
+          stress_avg: number | null
+          user_id: string
+        }
+        Insert: {
+          active_kcal?: number | null
+          body_battery_end?: number | null
+          body_battery_max?: number | null
+          body_battery_min?: number | null
+          body_battery_start?: number | null
+          date: string
+          hrv_morning_status?: string | null
+          hrv_overnight_avg?: number | null
+          resting_hr?: number | null
+          sleep_awake_min?: number | null
+          sleep_deep_min?: number | null
+          sleep_light_min?: number | null
+          sleep_rem_min?: number | null
+          sleep_score?: number | null
+          sleep_total_min?: number | null
+          steps?: number | null
+          stress_avg?: number | null
+          user_id: string
+        }
+        Update: {
+          active_kcal?: number | null
+          body_battery_end?: number | null
+          body_battery_max?: number | null
+          body_battery_min?: number | null
+          body_battery_start?: number | null
+          date?: string
+          hrv_morning_status?: string | null
+          hrv_overnight_avg?: number | null
+          resting_hr?: number | null
+          sleep_awake_min?: number | null
+          sleep_deep_min?: number | null
+          sleep_light_min?: number | null
+          sleep_rem_min?: number | null
+          sleep_score?: number | null
+          sleep_total_min?: number | null
+          steps?: number | null
+          stress_avg?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       garmin_tokens: {
         Row: {
           access_token: string
@@ -1138,6 +1318,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      garmin_vo2_trend: {
+        Row: {
+          created_at: string | null
+          fitness_age: number | null
+          id: string
+          measured_on: string
+          modality: string
+          user_id: string
+          vo2_max: number
+        }
+        Insert: {
+          created_at?: string | null
+          fitness_age?: number | null
+          id?: string
+          measured_on: string
+          modality: string
+          user_id: string
+          vo2_max: number
+        }
+        Update: {
+          created_at?: string | null
+          fitness_age?: number | null
+          id?: string
+          measured_on?: string
+          modality?: string
+          user_id?: string
+          vo2_max?: number
+        }
+        Relationships: []
       }
       goals: {
         Row: {
@@ -1206,6 +1416,137 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lab_markers: {
+        Row: {
+          confidence: string | null
+          id: string
+          is_out_of_range: boolean | null
+          name_en: string
+          name_original: string | null
+          notes: string | null
+          panel_id: string
+          reference_range_high: number | null
+          reference_range_low: number | null
+          status: string
+          unit: string | null
+          user_id: string
+          value: number | null
+        }
+        Insert: {
+          confidence?: string | null
+          id?: string
+          is_out_of_range?: boolean | null
+          name_en: string
+          name_original?: string | null
+          notes?: string | null
+          panel_id: string
+          reference_range_high?: number | null
+          reference_range_low?: number | null
+          status?: string
+          unit?: string | null
+          user_id: string
+          value?: number | null
+        }
+        Update: {
+          confidence?: string | null
+          id?: string
+          is_out_of_range?: boolean | null
+          name_en?: string
+          name_original?: string | null
+          notes?: string | null
+          panel_id?: string
+          reference_range_high?: number | null
+          reference_range_low?: number | null
+          status?: string
+          unit?: string | null
+          user_id?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_markers_panel_id_fkey"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "lab_panels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lab_panels: {
+        Row: {
+          created_at: string | null
+          extraction_json: Json | null
+          id: string
+          lab_name: string | null
+          original_file_path: string | null
+          out_of_range_count: number | null
+          panel_date: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          extraction_json?: Json | null
+          id?: string
+          lab_name?: string | null
+          original_file_path?: string | null
+          out_of_range_count?: number | null
+          panel_date: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          extraction_json?: Json | null
+          id?: string
+          lab_name?: string | null
+          original_file_path?: string | null
+          out_of_range_count?: number | null
+          panel_date?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      medical_events: {
+        Row: {
+          attachment_path: string | null
+          created_at: string | null
+          details: string | null
+          event_date: string
+          event_type: string
+          id: string
+          structured_data: Json | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          attachment_path?: string | null
+          created_at?: string | null
+          details?: string | null
+          event_date: string
+          event_type: string
+          id?: string
+          structured_data?: Json | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          attachment_path?: string | null
+          created_at?: string | null
+          details?: string | null
+          event_date?: string
+          event_type?: string
+          id?: string
+          structured_data?: Json | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       mesocycle_domain_targets: {
         Row: {
@@ -2098,6 +2439,45 @@ export type Database = {
         }
         Relationships: []
       }
+      supplements: {
+        Row: {
+          created_at: string | null
+          dose: number | null
+          dose_unit: string | null
+          end_date: string | null
+          id: string
+          name: string
+          notes: string | null
+          start_date: string
+          timing: string[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          dose?: number | null
+          dose_unit?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          start_date: string
+          timing?: string[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          dose?: number | null
+          dose_unit?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          start_date?: string
+          timing?: string[] | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       training_constraints: {
         Row: {
           created_at: string
@@ -2767,144 +3147,4 @@ export const Constants = {
     },
   },
 } as const
-
-// ─── Named aliases for call-site ergonomics ─────────────────────────────────
-// Derived from the generated Database type so they stay in sync with the
-// schema. Before adding a new alias here, confirm it's not already derivable
-// from Tables<'table_name'> or Enums<'enum_name'> at the call site.
-// Restored 2026-04-18 after a Supabase regeneration clobbered them.
-
-/**
- * Profile — hand-written to match production call-site assumptions.
- * Regenerated Supabase types make many fields nullable by default, but the
- * production code treats onboarding-required fields as non-nullable. Keep in
- * sync with the schema when onboarding or coach logic changes.
- */
-export interface Profile {
-    id: string
-    display_name: string | null
-    avatar_url: string | null
-    display_weights_as_percentages: boolean | null
-
-    training_age_years: number | null
-    sex: 'MALE' | 'FEMALE' | string | null
-    primary_goal: MesocycleGoal
-    equipment_access: EquipmentType[]
-    available_days: number
-    bodyweight_kg: number | null
-    benchmark_week_complete: boolean
-
-    onboarding_path: OnboardingPath | null
-    age: number | null
-    height_cm: number | null
-    unit_preference: string
-
-    lifting_experience: ExperienceLevel | null
-    running_experience: ExperienceLevel | null
-    rucking_experience: ExperienceLevel | null
-    rowing_experience: ExperienceLevel | null
-    swimming_experience: ExperienceLevel | null
-    cycling_experience: ExperienceLevel | null
-    conditioning_experience: ExperienceLevel | null
-
-    primary_training_environment: TrainingEnvironment | null
-    equipment_list: string[]
-    equipment_usage_intents: Record<string, EquipmentUsageIntent>
-
-    endurance_modality_preferences: string[]
-    conditioning_style_preferences: string[]
-
-    session_duration_minutes: number
-    two_a_day: TwoADayWillingness
-    time_of_day: TimeOfDayPreference
-
-    work_type: WorkType | null
-    stress_level: StressLevel | null
-    travel_frequency: TravelFrequency | null
-
-    goal_archetype: GoalArchetype | null
-
-    strength_methodology: MethodologyPreference
-    hypertrophy_methodology: MethodologyPreference
-    endurance_methodology: MethodologyPreference
-    transparency: TransparencyPreference
-
-    body_fat_percentage: number | null
-    body_comp_goal: BodyCompGoal | null
-
-    onboarding_completed_at: string | null
-    benchmark_discovery_status: BenchmarkDiscoveryStatus
-
-    has_injuries: boolean
-    movements_to_avoid: string[]
-
-    coaching_team: Array<{ coach: string; priority: number }>
-
-    // Phase 2.5 (A+): persisted training maxes per exercise
-    training_maxes: Record<string, {
-        trainingMaxKg: number
-        updatedAt: string
-        source: 'onboarding' | 'recalibration' | 'intervention_response'
-    }> | null
-
-    preferred_block_duration: number | null
-
-    created_at: string
-    updated_at: string
-}
-export type AthleteInjury = Tables<'athlete_injuries'>
-export type AthleteBenchmark = Tables<'athlete_benchmarks'>
-export type RecentTrainingActivity = Tables<'recent_training_activity'>
-export type Mesocycle = Tables<'mesocycles'>
-export type Microcycle = Tables<'microcycles'>
-export type Workout = Tables<'workouts'>
-export type ExerciseSet = Tables<'exercise_sets'>
-export type CardioLog = Tables<'cardio_logs'>
-export type RuckingLog = Tables<'rucking_logs'>
-export type ConditioningLog = Tables<'conditioning_logs'>
-/**
- * AICoachIntervention — hand-written to narrow JSONB columns.
- * `Tables<'ai_coach_interventions'>` types `exercise_swaps` / `volume_adjustments`
- * as generic `Json`, which breaks consumers that expect structured arrays/maps.
- * Keep this in sync with the table schema when columns change.
- */
-export interface AICoachIntervention {
-    id: string
-    microcycle_id: string
-    user_id: string
-    trigger_type: string
-    rationale: string
-    volume_adjustments: Record<string, number> | null
-    exercise_swaps: Array<{ from: string; to: string; reason: string }> | null
-    rir_adjustment: number | null
-    model_used: string | null
-    input_payload: Record<string, unknown> | null
-    raw_response: string | null
-    presented_to_user: boolean
-    user_accepted: boolean | null
-    user_feedback: string | null
-    created_at: string
-}
-
-export type TwoADayWillingness = Enums<'two_a_day_willingness'>
-export type WorkoutModality = Enums<'workout_modality'>
-export type ExperienceLevel = Enums<'experience_level'>
-export type TrainingEnvironment = Enums<'training_environment'>
-export type GoalArchetype = Enums<'goal_archetype'>
-export type InjuryBodyArea = Enums<'injury_body_area'>
-export type InjurySeverity = Enums<'injury_severity'>
-export type WorkType = Enums<'work_type'>
-export type StressLevel = Enums<'stress_level'>
-export type TravelFrequency = Enums<'travel_frequency'>
-export type TimeOfDayPreference = Enums<'time_of_day_preference'>
-export type MethodologyPreference = Enums<'methodology_preference'>
-export type TransparencyPreference = Enums<'transparency_preference'>
-export type BodyCompGoal = Enums<'body_comp_goal'>
-export type EquipmentUsageIntent = Enums<'equipment_usage_intent'>
-export type EquipmentType = Enums<'equipment_type'>
-export type MesocycleGoal = Enums<'mesocycle_goal'>
-export type OnboardingPath = Enums<'onboarding_path'>
-export type BenchmarkDiscoveryStatus = Enums<'benchmark_discovery_status'>
-export type BenchmarkSource = Enums<'benchmark_source'>
-export type PerceivedIntensity = Enums<'perceived_intensity'>
 
