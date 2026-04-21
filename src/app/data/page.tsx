@@ -1,12 +1,13 @@
 import { AlertTriangle } from "lucide-react"
-import { getTrainingOverview, getHealthSnapshot } from "@/lib/actions/data.actions"
+import { getTrainingOverview, getHealthSnapshot, getTrainingAdherence } from "@/lib/actions/data.actions"
 import { TrainingOverview } from "@/components/data/TrainingOverview"
 import { HealthSnapshotTile } from "@/components/data/overview/HealthSnapshotTile"
 
 export default async function DataPage() {
-    const [trainingRes, healthRes] = await Promise.all([
+    const [trainingRes, healthRes, adherenceRes] = await Promise.all([
         getTrainingOverview(),
         getHealthSnapshot(),
+        getTrainingAdherence(),
     ])
 
     if (!trainingRes.success) {
@@ -28,6 +29,10 @@ export default async function DataPage() {
         />
     ) : null
 
+    const adherence = adherenceRes.success
+        ? adherenceRes.data
+        : { cells: [], ragByCoach: {}, tally: { total: 0, byModality: {} }, interventions: [] }
+
     if (!data.mesocycleName) {
         return (
             <div className="p-6 animate-in fade-in duration-500">
@@ -47,7 +52,7 @@ export default async function DataPage() {
 
     return (
         <div className="animate-in fade-in duration-500">
-            <TrainingOverview data={data} healthTile={healthTile} />
+            <TrainingOverview data={data} adherence={adherence} healthTile={healthTile} />
         </div>
     )
 }

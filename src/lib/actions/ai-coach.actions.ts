@@ -266,6 +266,8 @@ export async function saveCoachIntervention(data: {
     modelUsed?: string
     inputPayload?: Record<string, unknown>
     rawResponse?: string
+    coachDomain?: string
+    patternSignal?: Record<string, unknown>
 }): Promise<ActionResult<AICoachIntervention>> {
     const supabase = await createClient()
 
@@ -288,6 +290,8 @@ export async function saveCoachIntervention(data: {
             input_payload: data.inputPayload ?? null,
             raw_response: data.rawResponse ?? null,
             presented_to_user: false,
+            coach_domain: data.coachDomain ?? null,
+            pattern_signal: data.patternSignal ?? null,
         })
         .select()
         .single()

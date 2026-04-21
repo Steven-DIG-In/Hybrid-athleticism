@@ -1,6 +1,11 @@
 import { AlertTriangle } from "lucide-react"
 import { getStrengthAnalytics } from "@/lib/actions/data.actions"
 import { StrengthDashboard } from "@/components/data/StrengthDashboard"
+import { getRecentCoachDeltaSeries } from '@/lib/analytics/shared/coach-domain'
+import { detectPattern } from '@/lib/analytics/coach-bias'
+import { createClient } from '@/lib/supabase/server'
+import { PerformanceDeltaChart } from '@/components/data/domain/PerformanceDeltaChart'
+import { PatternFlagCard } from '@/components/data/domain/PatternFlagCard'
 
 export default async function StrengthPage() {
     const result = await getStrengthAnalytics()
@@ -31,8 +36,24 @@ export default async function StrengthPage() {
         )
     }
 
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    // user is guaranteed non-null because getStrengthAnalytics already succeeded.
+    const series = user
+        ? await getRecentCoachDeltaSeries(user.id, 'strength', { limit: 20 })
+        : []
+    const points = series.slice().reverse().map(d => ({
+        date: d.created_at.slice(0, 10),
+        delta_pct: d.delta_pct,
+    }))
+    const flag = detectPattern(
+        series.map(d => ({ delta_pct: d.delta_pct, workout_id: d.session_inventory_id })),
+    )
+
     return (
-        <div className="animate-in fade-in duration-500">
+        <div className="animate-in fade-in duration-500 flex flex-col gap-4">
+            <PatternFlagCard flag={flag} coach="strength" />
+            <PerformanceDeltaChart title="strength performance deltas" points={points} />
             <StrengthDashboard data={data} />
         </div>
     )
