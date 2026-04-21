@@ -54,11 +54,8 @@ vi.mock('@/lib/supabase/server', () => {
   return { createClient: vi.fn(async () => client) }
 })
 
-import {
-  computeOutOfRange,
-  addPanelManual,
-  type MarkerInput,
-} from '../bloodwork.actions'
+import { addPanelManual } from '../bloodwork.actions'
+import { computeOutOfRange, type MarkerInput } from '../bloodwork.helpers'
 
 // ---------------------------------------------------------------------------
 // helpers

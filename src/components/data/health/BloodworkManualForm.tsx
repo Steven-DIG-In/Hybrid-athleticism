@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { addPanelManual, type MarkerInput } from '@/lib/actions/health/bloodwork.actions'
+import { addPanelManual } from '@/lib/actions/health/bloodwork.actions'
+import { type MarkerInput } from '@/lib/actions/health/bloodwork.helpers'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash } from 'lucide-react'
 
