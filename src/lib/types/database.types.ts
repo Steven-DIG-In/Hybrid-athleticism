@@ -2764,6 +2764,12 @@ export type Database = {
         Args: { reps: number; rir?: number; weight: number }
         Returns: number
       }
+      disconnect_garmin: { Args: never; Returns: undefined }
+      read_secret: { Args: { secret_id: string }; Returns: string }
+      store_garmin_credentials: {
+        Args: { p_email: string; p_password: string }
+        Returns: undefined
+      }
     }
     Enums: {
       benchmark_discovery_status: "pending" | "in_progress" | "complete"
@@ -3147,13 +3153,6 @@ export const Constants = {
     },
   },
 } as const
-
-
-// ─── Named aliases for call-site ergonomics ─────────────────────────────────
-// Derived from the generated Database type so they stay in sync with the
-// schema. Before adding a new alias here, confirm it's not already derivable
-// from Tables<'table_name'> or Enums<'enum_name'> at the call site.
-// Restored 2026-04-18 after a Supabase regeneration clobbered them.
 
 /**
  * Profile — hand-written to match production call-site assumptions.
