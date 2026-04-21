@@ -7,9 +7,15 @@ import { format } from 'date-fns'
 import type { TrainingOverviewData } from '@/lib/types/data.types'
 import { WeeklyLoadChart } from './WeeklyLoadChart'
 import { ModalityRing } from './ModalityRing'
+import { BlockAdherenceHeatmap } from './overview/BlockAdherenceHeatmap'
+import { CoachPromptsInbox } from './overview/CoachPromptsInbox'
+import { CoachBiasTile } from './overview/CoachBiasTile'
+import { OffPlanTally } from './overview/OffPlanTally'
+import type { TrainingAdherenceData } from '@/lib/actions/data.actions'
 
 interface TrainingOverviewProps {
     data: TrainingOverviewData
+    adherence: TrainingAdherenceData
     healthTile?: React.ReactNode
 }
 
@@ -29,7 +35,7 @@ const MODALITY_COLORS: Record<string, string> = {
     MOBILITY: 'text-pink-400',
 }
 
-export function TrainingOverview({ data, healthTile }: TrainingOverviewProps) {
+export function TrainingOverview({ data, adherence, healthTile }: TrainingOverviewProps) {
     const mesocycleProgress = data.totalWeeks > 0
         ? Math.round((data.currentWeek / data.totalWeeks) * 100)
         : 0
@@ -107,6 +113,23 @@ export function TrainingOverview({ data, healthTile }: TrainingOverviewProps) {
                         W{data.currentWeek}/{data.totalWeeks}
                     </span>
                 </motion.div>
+            </div>
+
+            {/* Training adherence tiles */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <BlockAdherenceHeatmap cells={adherence.cells} />
+                <CoachPromptsInbox
+                    interventions={adherence.interventions.map(i => ({
+                        id: i.id,
+                        coach_domain: i.coach_domain ?? 'general',
+                        trigger_type: i.trigger_type,
+                        rationale: i.rationale,
+                        created_at: i.created_at,
+                        needs_retry: i.needs_retry ?? undefined,
+                    }))}
+                />
+                <CoachBiasTile ragByCoach={adherence.ragByCoach} />
+                <OffPlanTally tally={adherence.tally} />
             </div>
 
             {/* Weekly load chart */}

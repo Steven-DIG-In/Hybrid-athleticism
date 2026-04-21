@@ -783,3 +783,63 @@ export async function getHealthSnapshot() {
         bloodwork, garmin, activeSupplements: sup.count,
     } }
 }
+
+// ─── Training Adherence (overview tiles) ────────────────────────────────────
+
+import type { HeatmapCell } from '@/lib/analytics/block-adherence'
+import type { RAG } from '@/lib/analytics/coach-bias'
+import type { OffPlanTally as OffPlanTallyData } from '@/lib/analytics/off-plan-tally'
+import type { Database } from '@/lib/types/database.types'
+
+type AICoachInterventionRow = Database['public']['Tables']['ai_coach_interventions']['Row']
+
+export interface TrainingAdherenceData {
+    cells: HeatmapCell[]
+    ragByCoach: Record<string, RAG>
+    tally: OffPlanTallyData
+    interventions: AICoachInterventionRow[]
+}
+
+export async function getTrainingAdherence(): Promise<ActionResult<TrainingAdherenceData>> {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return { success: false, error: 'Not authenticated' }
+
+    const { currentBlockHeatmap } = await import('@/lib/analytics/block-adherence')
+    const { allCoachesRAG } = await import('@/lib/analytics/coach-bias')
+    const { currentBlockTally } = await import('@/lib/analytics/off-plan-tally')
+    const { getUnreviewedInterventions } = await import('@/lib/actions/ai-coach.actions')
+
+    // Resolve active mesocycle + current week from block_pointer.
+    const { data: activeMesocycle } = await supabase
+        .from('mesocycles')
+        .select('id, start_date')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle()
+
+    let cells: HeatmapCell[] = []
+    let tally: OffPlanTallyData = { total: 0, byModality: {} }
+    if (activeMesocycle) {
+        const { data: pointer } = await supabase
+            .from('block_pointer')
+            .select('week_number')
+            .eq('user_id', user.id)
+            .eq('mesocycle_id', activeMesocycle.id)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        const weekNumber = pointer?.week_number ?? 1
+        ;[cells, tally] = await Promise.all([
+            currentBlockHeatmap(user.id, activeMesocycle.id, weekNumber),
+            currentBlockTally(user.id, activeMesocycle.start_date),
+        ])
+    }
+    const [ragByCoach, interventionsRes] = await Promise.all([
+        allCoachesRAG(user.id),
+        getUnreviewedInterventions(),
+    ])
+    const interventions: AICoachInterventionRow[] = interventionsRes.success ? interventionsRes.data : []
+
+    return { success: true, data: { cells, ragByCoach, tally, interventions } }
+}
