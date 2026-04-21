@@ -75,8 +75,11 @@ export async function extractFromBase64(args: ExtractArgs): Promise<ExtractResul
     ],
   })
 
-  const text =
-    response.content.find((b: { type: string }) => b.type === 'text')?.text ?? ''
+  const textBlock = response.content.find(
+    (b): b is Extract<(typeof response.content)[number], { type: 'text' }> =>
+      b.type === 'text'
+  )
+  const text = textBlock?.text ?? ''
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
