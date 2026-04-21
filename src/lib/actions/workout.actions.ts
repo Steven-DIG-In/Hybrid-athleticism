@@ -15,6 +15,7 @@ import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
 import { advanceBlockPointer } from './block-pointer.actions'
 import { recalibrateFromTopSet } from './recalibrate-from-top-set.actions'
+import { fireBlockEndInterventions } from '@/lib/interventions/block-end-trigger'
 
 /**
  * Get today's scheduled workout with all its sets/exercises.
@@ -227,6 +228,47 @@ export async function completeWorkout(
                 await advanceBlockPointer(inventory.mesocycle_id, inventory.week_number)
             } catch (err) {
                 console.error('[completeWorkout] failed to advance block_pointer', err)
+            }
+
+            // Block-end intervention hook: fires once when the last pending/active session
+            // in this (mesocycle_id, week_number) transitions out of pending/active. Runs
+            // after session_inventory update so the count reflects the just-completed row.
+            try {
+                const { count: remaining, error: countErr } = await supabase
+                    .from('session_inventory')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('user_id', user.id)
+                    .eq('mesocycle_id', inventory.mesocycle_id)
+                    .eq('week_number', inventory.week_number)
+                    .in('status', ['pending', 'active'])
+
+                if (countErr) {
+                    console.error('[completeWorkout] block-end: failed to count remaining sessions', countErr)
+                } else if (remaining === 0) {
+                    const { data: microcycle, error: mcErr } = await supabase
+                        .from('microcycles')
+                        .select('id')
+                        .eq('user_id', user.id)
+                        .eq('mesocycle_id', inventory.mesocycle_id)
+                        .eq('week_number', inventory.week_number)
+                        .maybeSingle()
+
+                    if (mcErr) {
+                        console.error('[completeWorkout] block-end: failed to fetch microcycle', mcErr)
+                    } else if (microcycle) {
+                        await fireBlockEndInterventions(
+                            user.id,
+                            inventory.mesocycle_id,
+                            inventory.week_number,
+                            microcycle.id,
+                        )
+                    }
+                    // If microcycle row not found for this (mesocycle, week), silently skip —
+                    // likely a seed-data gap; the block still analytically "completes" without
+                    // a matching microcycle row to persist the intervention against.
+                }
+            } catch (err) {
+                console.error('[completeWorkout] block-end hook failed', err)
             }
         }
     }
