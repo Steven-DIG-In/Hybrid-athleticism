@@ -3261,10 +3261,15 @@ export interface AICoachIntervention {
     model_used: string | null
     input_payload: Record<string, unknown> | null
     raw_response: string | null
-    presented_to_user: boolean
+    presented_to_user: boolean | null
     user_accepted: boolean | null
     user_feedback: string | null
     created_at: string
+    // Migration 016 additive columns (pattern-based interventions)
+    coach_domain: string | null
+    pattern_signal: Record<string, unknown> | null
+    user_response: string | null
+    needs_retry: boolean | null
 }
 
 export type TwoADayWillingness = Enums<'two_a_day_willingness'>
