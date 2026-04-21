@@ -789,9 +789,9 @@ export async function getHealthSnapshot() {
 import type { HeatmapCell } from '@/lib/analytics/block-adherence'
 import type { RAG } from '@/lib/analytics/coach-bias'
 import type { OffPlanTally as OffPlanTallyData } from '@/lib/analytics/off-plan-tally'
-import type { Database } from '@/lib/types/database.types'
+import type { AICoachIntervention } from '@/lib/types/database.types'
 
-type AICoachInterventionRow = Database['public']['Tables']['ai_coach_interventions']['Row']
+type AICoachInterventionRow = AICoachIntervention
 
 export interface TrainingAdherenceData {
     cells: HeatmapCell[]
