@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { modalityToCoachDomain } from './shared/coach-domain'
 
 export interface OffPlanTally {
   total: number
@@ -17,18 +18,12 @@ export function computeOffPlanTally(
   return { total: rows.length, byModality }
 }
 
+/**
+ * @deprecated Delegates to modalityToCoachDomain. Kept as a stable export surface
+ * for the off-plan tally; prefer modalityToCoachDomain directly in new code.
+ */
 export function linkedDomainForModality(modality: string): string | null {
-  switch (modality) {
-    case 'run':
-    case 'ride':
-      return 'endurance'
-    case 'strength':
-      return 'strength'
-    case 'conditioning':
-      return 'conditioning'
-    default:
-      return null
-  }
+  return modalityToCoachDomain(modality)
 }
 
 export async function currentBlockTally(userId: string, blockStart: string) {
