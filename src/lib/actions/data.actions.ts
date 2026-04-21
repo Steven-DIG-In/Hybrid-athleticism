@@ -2,6 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server'
 import type { ActionResult } from '@/lib/types/training.types'
+import { latestBloodworkSnapshot } from '@/lib/analytics/health/bloodwork-snapshot'
+import { garminSevenDayTrends } from '@/lib/analytics/health/garmin-trends'
+import { activeSupplementsSnapshot } from '@/lib/analytics/health/supplements-snapshot'
 import type {
     TrainingOverviewData,
     WeeklyLoadData,
@@ -763,4 +766,20 @@ export async function getRecoveryAnalytics(): Promise<ActionResult<RecoveryAnaly
             totalWeeks: mesocycle.week_count,
         },
     }
+}
+
+// ─── Health Snapshot ────────────────────────────────────────────────────────
+
+export async function getHealthSnapshot() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false as const, error: 'unauthenticated' }
+    const [bloodwork, garmin, sup] = await Promise.all([
+        latestBloodworkSnapshot(user.id),
+        garminSevenDayTrends(user.id),
+        activeSupplementsSnapshot(user.id),
+    ])
+    return { success: true as const, data: {
+        bloodwork, garmin, activeSupplements: sup.count,
+    } }
 }

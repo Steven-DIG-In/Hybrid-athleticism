@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { motion } from 'framer-motion'
 import { CheckCircle2, Target, Calendar, TrendingUp, Dumbbell, Timer, Footprints, Zap, Activity } from 'lucide-react'
 import { format } from 'date-fns'
@@ -9,6 +10,7 @@ import { ModalityRing } from './ModalityRing'
 
 interface TrainingOverviewProps {
     data: TrainingOverviewData
+    healthTile?: React.ReactNode
 }
 
 const MODALITY_ICONS: Record<string, typeof Dumbbell> = {
@@ -27,7 +29,7 @@ const MODALITY_COLORS: Record<string, string> = {
     MOBILITY: 'text-pink-400',
 }
 
-export function TrainingOverview({ data }: TrainingOverviewProps) {
+export function TrainingOverview({ data, healthTile }: TrainingOverviewProps) {
     const mesocycleProgress = data.totalWeeks > 0
         ? Math.round((data.currentWeek / data.totalWeeks) * 100)
         : 0
@@ -145,6 +147,7 @@ export function TrainingOverview({ data }: TrainingOverviewProps) {
                     </div>
                 </div>
             )}
+            {healthTile}
         </div>
     )
 }
