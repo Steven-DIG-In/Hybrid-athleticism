@@ -4,7 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { computeOutOfRange, type MarkerInput, type PanelManualInput } from './bloodwork.helpers'
 
-export async function addPanelManual(input: PanelManualInput) {
+export async function addPanelManual(
+  input: PanelManualInput & { original_file_path?: string | null }
+) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'unauthenticated' as const }
@@ -21,6 +23,7 @@ export async function addPanelManual(input: PanelManualInput) {
       lab_name: input.lab_name ?? null,
       status: 'ready',
       out_of_range_count: outOfRangeCount,
+      original_file_path: input.original_file_path ?? null,
     })
     .select('id').single()
   if (pErr) return { ok: false, error: pErr.message }

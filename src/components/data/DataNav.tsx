@@ -8,7 +8,9 @@ const tabs = [
     { name: 'Overview', href: '/data' },
     { name: 'Strength', href: '/data/strength' },
     { name: 'Endurance', href: '/data/endurance' },
+    { name: 'Conditioning', href: '/data/conditioning' },
     { name: 'Recovery', href: '/data/recovery' },
+    { name: 'Health', href: '/data/health' },
 ]
 
 export function DataNav() {
