@@ -14,4 +14,12 @@ describe('modalityToCoachDomain', () => {
     expect(modalityToCoachDomain('recovery')).toBe('recovery')
     expect(modalityToCoachDomain('unknown')).toBeNull()
   })
+
+  it('maps uppercase workout_modality enum values to coach domain', () => {
+    expect(modalityToCoachDomain('LIFTING')).toBe('strength')
+    expect(modalityToCoachDomain('CARDIO')).toBe('endurance')
+    expect(modalityToCoachDomain('RUCKING')).toBe('endurance')
+    expect(modalityToCoachDomain('METCON')).toBe('conditioning')
+    expect(modalityToCoachDomain('MOBILITY')).toBe('mobility')
+  })
 })

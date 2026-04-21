@@ -1,17 +1,27 @@
 export type CoachDomain = 'strength' | 'hypertrophy' | 'endurance' | 'conditioning' | 'mobility' | 'recovery'
 
 export function modalityToCoachDomain(modality: string): CoachDomain | null {
-  switch (modality) {
-    case 'strength': return 'strength'
-    case 'hypertrophy': return 'hypertrophy'
+  switch (modality.toLowerCase()) {
+    case 'strength':
+    case 'lifting':
+      return 'strength'
+    case 'hypertrophy':
+      return 'hypertrophy'
     case 'endurance':
     case 'run':
-    case 'ride': return 'endurance'
+    case 'ride':
+    case 'cardio':
+    case 'rucking':
+      return 'endurance'
     case 'conditioning':
-    case 'metcon': return 'conditioning'
-    case 'mobility': return 'mobility'
-    case 'recovery': return 'recovery'
-    default: return null
+    case 'metcon':
+      return 'conditioning'
+    case 'mobility':
+      return 'mobility'
+    case 'recovery':
+      return 'recovery'
+    default:
+      return null
   }
 }
 
