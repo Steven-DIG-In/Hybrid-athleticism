@@ -16,6 +16,8 @@ import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.acti
 import { advanceBlockPointer } from './block-pointer.actions'
 import { recalibrateFromTopSet } from './recalibrate-from-top-set.actions'
 import { fireBlockEndInterventions } from '@/lib/interventions/block-end-trigger'
+import { evaluateAndFirePattern } from '@/lib/interventions/rolling-pattern-trigger'
+import { modalityToCoachDomain } from '@/lib/analytics/shared/coach-domain'
 
 /**
  * Get today's scheduled workout with all its sets/exercises.
@@ -183,14 +185,15 @@ export async function completeWorkout(
         }
     }
 
-    // Generate performance deltas non-blocking — only applies to sessions
-    // that were created from inventory (i.e., have a session_inventory_id).
-    // Failure here must never surface to the athlete completing a workout.
-    if (workout.session_inventory_id) {
-        generatePerformanceDeltas(workout.session_inventory_id, user.id).catch((err) => {
+    // Performance delta generation is needed before the rolling-pattern trigger
+    // can detect a pattern that includes this workout. Capture the promise here
+    // and await it later in the pattern hook. The `.catch` keeps delta errors
+    // from rejecting the promise, so the pattern hook's `await` never throws.
+    const deltaPromise: Promise<unknown> = workout.session_inventory_id
+        ? generatePerformanceDeltas(workout.session_inventory_id, user.id).catch((err) => {
             console.error('[completeWorkout] performance delta generation failed:', err)
         })
-    }
+        : Promise.resolve()
 
     const today = new Date().toISOString().slice(0, 10)
 
@@ -289,6 +292,34 @@ export async function completeWorkout(
                 }
             } catch (err) {
                 console.error('[completeWorkout] block-end hook failed', err)
+            }
+
+            // Rolling-pattern intervention hook: evaluates the most recent 5 deltas for
+            // this coach and may fire a `rolling_pattern` intervention if 3 consecutive
+            // same-direction >10% deltas are detected and the 7-day cooldown has cleared.
+            // Awaits the delta promise so the current workout's delta is visible to the
+            // pattern detector. Any failure is logged and does not fail the completion.
+            try {
+                await deltaPromise
+                const coach = modalityToCoachDomain(workout.modality)
+                if (!coach) {
+                    // Unknown modality — skip pattern evaluation. Unusual but non-fatal.
+                    console.warn('[completeWorkout] rolling-pattern: unmapped modality', workout.modality)
+                } else {
+                    const { data: microcycleForPattern } = await supabase
+                        .from('microcycles')
+                        .select('id')
+                        .eq('user_id', user.id)
+                        .eq('mesocycle_id', inventory.mesocycle_id)
+                        .eq('week_number', inventory.week_number)
+                        .maybeSingle()
+                    if (microcycleForPattern) {
+                        await evaluateAndFirePattern(user.id, coach, microcycleForPattern.id)
+                    }
+                    // Missing microcycle — silently skip (block-end hook already logs this case).
+                }
+            } catch (err) {
+                console.error('[completeWorkout] rolling-pattern hook failed', err)
             }
         }
     }
