@@ -87,7 +87,7 @@ export async function getRecentCoachDeltaSeries(
     if (!modality || modalityToCoachDomain(modality) !== coach) continue
     const d = computeExerciseDeltaPct(r)
     if (d == null) continue
-    const bucket = bySession.get(r.session_inventory_id) ?? { created_at: r.created_at, deltas: [] }
+    const bucket = bySession.get(r.session_inventory_id) ?? { created_at: r.created_at as string, deltas: [] as number[] }
     bucket.deltas.push(d)
     bySession.set(r.session_inventory_id, bucket)
   }
