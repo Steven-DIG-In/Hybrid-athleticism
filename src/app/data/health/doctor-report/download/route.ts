@@ -5,7 +5,8 @@ import {
   getDoctorReportSnapshot, persistDoctorReport,
 } from '@/lib/actions/health/doctor-report.actions'
 import { DoctorReportPDF } from '@/lib/reports/doctor-report-pdf'
-import { renderToBuffer } from '@react-pdf/renderer'
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer'
+import type { ReactElement } from 'react'
 import type { WindowPreset } from '@/lib/reports/types'
 
 export async function GET(req: NextRequest) {
@@ -18,7 +19,9 @@ export async function GET(req: NextRequest) {
     preset === 'custom' ? { preset, start, end } : { preset }
   )
 
-  const pdfBuffer = await renderToBuffer(createElement(DoctorReportPDF, { snapshot }))
+  const pdfBuffer = await renderToBuffer(
+    createElement(DoctorReportPDF, { snapshot }) as unknown as ReactElement<DocumentProps>
+  )
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

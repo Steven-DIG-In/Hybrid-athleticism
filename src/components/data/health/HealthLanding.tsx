@@ -4,7 +4,12 @@ import { FileText, Droplet, Pill, Stethoscope, Watch, Scale } from 'lucide-react
 
 type Snapshot = {
   bloodwork: { last_panel_date: string | null; out_of_range_count: number }
-  garmin: { last_synced: string | null }
+  garmin: {
+    last_synced: string | null
+    sleep_trend?: string
+    hrv_trend?: string
+    rhr_trend?: string
+  }
   activeSupplements: number
   medicals: { last_event_date: string | null; last_event_type: string | null }
   bodyComp: { latest: { measured_on: string; weight_kg: number | null; body_fat_pct: number | null } | null }

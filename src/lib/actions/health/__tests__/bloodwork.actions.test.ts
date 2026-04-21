@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 const { state } = vi.hoisted(() => ({
   state: {
     panelInsertPayload: null as any,
-    markerInsertPayload: null as any[],
+    markerInsertPayload: null as any[] | null,
   },
 }))
 
@@ -143,9 +143,10 @@ describe('addPanelManual', () => {
     await addPanelManual({ panel_date: '2026-04-01', markers })
 
     expect(state.markerInsertPayload).toHaveLength(2)
+    const payload = state.markerInsertPayload!
 
     // First marker is out of range
-    expect(state.markerInsertPayload[0]).toMatchObject({
+    expect(payload[0]).toMatchObject({
       panel_id: 'panel-1',
       user_id: 'u1',
       name_en: 'Glucose',
@@ -158,7 +159,7 @@ describe('addPanelManual', () => {
     })
 
     // Second marker is in range
-    expect(state.markerInsertPayload[1]).toMatchObject({
+    expect(payload[1]).toMatchObject({
       panel_id: 'panel-1',
       user_id: 'u1',
       name_en: 'HbA1c',
