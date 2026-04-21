@@ -68,7 +68,7 @@ export async function fireBlockEndInterventions(
     const mean = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length
     if (!shouldFireBlockEnd({ coach, meanMagnitudePct: mean })) continue
     const rag = classifyRAG(magnitudes)
-    await saveCoachIntervention({
+    const result = await saveCoachIntervention({
       microcycleId,
       triggerType: 'block_end',
       rationale: `Block-end review for ${coach}: mean delta magnitude ${mean.toFixed(1)}% (${rag}).`,
@@ -79,5 +79,8 @@ export async function fireBlockEndInterventions(
         rag,
       },
     })
+    if (!result.success) {
+      console.error('[fireBlockEndInterventions] saveCoachIntervention failed:', result.error)
+    }
   }
 }

@@ -51,12 +51,15 @@ export async function evaluateAndFirePattern(
   })
   if (!fire || !pattern) return { fired: false as const }
 
-  await saveCoachIntervention({
+  const result = await saveCoachIntervention({
     microcycleId,
     triggerType: 'rolling_pattern',
     rationale: `${coachDomain} coach flag: ${pattern.direction}-performance pattern across 3 sessions (${pattern.magnitudes.map(m => m.toFixed(0) + '%').join(', ')}).`,
     coachDomain,
     patternSignal: pattern as unknown as Record<string, unknown>,
   })
+  if (!result.success) {
+    console.error('[evaluateAndFirePattern] saveCoachIntervention failed:', result.error)
+  }
   return { fired: true as const, pattern }
 }
