@@ -256,11 +256,31 @@ export async function completeWorkout(
                     if (mcErr) {
                         console.error('[completeWorkout] block-end: failed to fetch microcycle', mcErr)
                     } else if (microcycle) {
-                        await fireBlockEndInterventions(
-                            user.id,
-                            inventory.mesocycle_id,
-                            inventory.week_number,
-                            microcycle.id,
+                        // Idempotency guard: suppress block-end if it already fired for this microcycle.
+                        // Prevents duplicate interventions on workout re-completion (double-click, retry).
+                        const { count: existingCount, error: existingErr } = await supabase
+                            .from('ai_coach_interventions')
+                            .select('id', { count: 'exact', head: true })
+                            .eq('user_id', user.id)
+                            .eq('microcycle_id', microcycle.id)
+                            .eq('trigger_type', 'block_end')
+
+                        if (existingErr) {
+                            console.error('[completeWorkout] block-end: failed to check existing interventions', existingErr)
+                        } else if (existingCount && existingCount > 0) {
+                            // Already fired for this microcycle — skip silently.
+                        } else {
+                            await fireBlockEndInterventions(
+                                user.id,
+                                inventory.mesocycle_id,
+                                inventory.week_number,
+                                microcycle.id,
+                            )
+                        }
+                    } else {
+                        console.warn(
+                            '[completeWorkout] block-end: microcycle row missing for',
+                            { mesocycleId: inventory.mesocycle_id, weekNumber: inventory.week_number },
                         )
                     }
                     // If microcycle row not found for this (mesocycle, week), silently skip —
