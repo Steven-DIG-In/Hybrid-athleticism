@@ -106,7 +106,8 @@ type EditPatch = Partial<{
 export async function confirmPanel(
   panelId: string,
   action: 'all' | 'except_flagged',
-  edits?: Record<string, EditPatch>
+  edits?: Record<string, EditPatch>,
+  flaggedIds?: string[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient()
   const { data: markers } = await supabase
@@ -127,8 +128,10 @@ export async function confirmPanel(
     .select('*')
     .eq('panel_id', panelId)
   const all = refreshed ?? []
+  const flaggedSet = new Set(flaggedIds ?? [])
   const accepted = all.filter((m) => {
     if (action === 'all') return true
+    if (flaggedSet.has(m.id)) return false
     return m.value != null && m.unit != null
   })
 

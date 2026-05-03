@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Flag } from 'lucide-react'
 import {
   confirmPanel,
   rejectAndRetry,
@@ -48,15 +49,27 @@ export function LabReviewTable({
 }) {
   const router = useRouter()
   const [edits, setEdits] = useState<Record<string, EditPatch>>({})
+  const [manualFlags, setManualFlags] = useState<Set<string>>(() => {
+    return new Set(markers.filter(isFlagged).map((m) => m.id))
+  })
   const [submitting, setSubmitting] = useState(false)
 
   function editMarker(id: string, patch: EditPatch) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
   }
 
+  function toggleFlag(id: string) {
+    setManualFlags((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   async function accept(action: 'all' | 'except_flagged') {
     setSubmitting(true)
-    const res = await confirmPanel(panel.id, action, edits)
+    const res = await confirmPanel(panel.id, action, edits, [...manualFlags])
     setSubmitting(false)
     if (res.ok) router.push(`/data/health/bloodwork/${panel.id}`)
   }
@@ -107,7 +120,8 @@ export function LabReviewTable({
         <table className="w-full text-xs">
           <thead>
             <tr className="text-neutral-500 text-left">
-              <th className="py-1">Marker</th>
+              <th className="py-1 w-8"></th>
+              <th>Marker</th>
               <th>Value</th>
               <th>Unit</th>
               <th>Low</th>
@@ -120,12 +134,23 @@ export function LabReviewTable({
             {markers.map((m) => {
               const e = edits[m.id] ?? {}
               const merged: Marker = { ...m, ...e }
-              const flagged = isFlagged(merged)
+              const flagged = manualFlags.has(m.id)
               return (
                 <tr
                   key={m.id}
                   className={`border-t border-neutral-900 ${flagged ? 'bg-amber-950/20' : ''}`}
                 >
+                  <td className="py-1 align-top">
+                    <button
+                      type="button"
+                      onClick={() => toggleFlag(m.id)}
+                      title={flagged ? 'Unflag (will be accepted)' : 'Flag (will be skipped on "except flagged")'}
+                      aria-pressed={flagged}
+                      className={`p-1 rounded hover:bg-neutral-900 ${flagged ? 'text-amber-500' : 'text-neutral-700'}`}
+                    >
+                      <Flag className="w-3.5 h-3.5" fill={flagged ? 'currentColor' : 'none'} />
+                    </button>
+                  </td>
                   <td className="py-1">
                     <input
                       value={e.name_en ?? m.name_en}
