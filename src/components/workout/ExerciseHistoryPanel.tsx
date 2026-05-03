@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { ChevronDown, ChevronUp, TrendingUp, Trophy } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { enUS } from "date-fns/locale"
 
 interface HistorySet {
     logged_at: string
@@ -84,7 +85,7 @@ export function ExerciseHistoryPanel({
                                     {lastSet.actual_weight_kg || "--"}kg × {lastSet.actual_reps} @ RIR {lastSet.rir_actual ?? "--"}
                                     {lastSet.logged_at && (
                                         <span className="text-neutral-500 ml-2">
-                                            ({formatDistanceToNow(new Date(lastSet.logged_at), { addSuffix: true })})
+                                            ({formatDistanceToNow(new Date(lastSet.logged_at), { addSuffix: true, locale: enUS })})
                                         </span>
                                     )}
                                 </span>
@@ -136,7 +137,7 @@ export function ExerciseHistoryPanel({
                                 </div>
                                 {set.logged_at && (
                                     <span className="text-xs text-neutral-600">
-                                        {formatDistanceToNow(new Date(set.logged_at), { addSuffix: true })}
+                                        {formatDistanceToNow(new Date(set.logged_at), { addSuffix: true, locale: enUS })}
                                     </span>
                                 )}
                             </div>

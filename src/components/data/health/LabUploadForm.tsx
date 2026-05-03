@@ -26,18 +26,26 @@ export function LabUploadForm() {
   return (
     <div className="space-y-3 max-w-lg">
       <h1 className="text-xl font-space-grotesk">Upload lab report</h1>
-      <div className="p-6 border-2 border-dashed border-neutral-800 rounded text-center">
+      <label
+        onDragOver={(e) => { e.preventDefault() }}
+        onDrop={(e) => {
+          e.preventDefault()
+          const f = e.dataTransfer.files?.[0]
+          if (f) setFile(f)
+        }}
+        className="block p-6 border-2 border-dashed border-neutral-800 rounded text-center cursor-pointer hover:border-amber-900 transition-colors"
+      >
         <UploadCloud className="w-8 h-8 mx-auto text-neutral-500 mb-2" />
+        <div className="text-sm text-neutral-300">
+          {file ? file.name : 'Click to choose a PDF or photo, or drop one here'}
+        </div>
         <input
           type="file"
           accept="application/pdf,image/jpeg,image/png"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm"
+          className="sr-only"
         />
-        {file && (
-          <div className="text-xs text-neutral-400 mt-2">{file.name}</div>
-        )}
-      </div>
+      </label>
       {error && <div className="text-xs text-amber-500">{error}</div>}
       <button
         onClick={submit}

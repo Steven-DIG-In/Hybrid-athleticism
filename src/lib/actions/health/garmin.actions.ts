@@ -25,10 +25,14 @@ export async function connectGarmin(
     await gc.login()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    if (/mfa|two-?factor|2fa/i.test(msg)) {
+    console.error('[garmin-connect] login probe failed. raw error:', err)
+    // Only treat as definite MFA when the message clearly indicates it,
+    // not when the lib hedges with "Ticket not found OR MFA" (ambiguous SSO failure).
+    const definiteMfa = /\b(mfa\s+required|two[- ]?factor|2fa\s+required|enter\s+(a\s+)?(otp|code))\b/i.test(msg)
+    if (definiteMfa) {
       return { ok: false, error: 'MFA required', needsMfa: true }
     }
-    return { ok: false, error: `auth_failed: ${msg}` }
+    return { ok: false, error: `Garmin login failed: ${msg}` }
   }
 
   const { error } = await supabase.rpc('store_garmin_credentials', {

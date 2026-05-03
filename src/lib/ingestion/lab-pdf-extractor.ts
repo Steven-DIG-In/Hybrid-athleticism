@@ -51,11 +51,30 @@ export type ExtractResult =
   | { ok: true; data: LabExtraction }
   | { ok: false; error: string }
 
+function tryParseJSON(raw: string): unknown | undefined {
+  const stripped = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim()
+  try {
+    return JSON.parse(stripped)
+  } catch { /* fall through */ }
+  const first = stripped.indexOf('{')
+  const last = stripped.lastIndexOf('}')
+  if (first !== -1 && last > first) {
+    try {
+      return JSON.parse(stripped.slice(first, last + 1))
+    } catch { /* fall through */ }
+  }
+  return undefined
+}
+
 export async function extractFromBase64(args: ExtractArgs): Promise<ExtractResult> {
   const client = args.client ?? new Anthropic()
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 8000,
+    max_tokens: 16000,
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -80,10 +99,18 @@ export async function extractFromBase64(args: ExtractArgs): Promise<ExtractResul
       b.type === 'text'
   )
   const text = textBlock?.text ?? ''
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
+  const parsed = tryParseJSON(text)
+  if (parsed === undefined) {
+    console.error(
+      '[lab-extractor] failed to parse Haiku output.',
+      'stop_reason:', response.stop_reason,
+      'text length:', text.length,
+      '\nfirst 1000 chars:\n', text.slice(0, 1000),
+      '\nlast 500 chars:\n', text.slice(-500),
+    )
+    if (response.stop_reason === 'max_tokens') {
+      return { ok: false, error: 'Lab report too long — extractor ran out of tokens. Try a smaller PDF or contact support.' }
+    }
     return { ok: false, error: 'Malformed JSON from extractor' }
   }
 
