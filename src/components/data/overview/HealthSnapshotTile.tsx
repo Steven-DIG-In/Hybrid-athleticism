@@ -24,24 +24,25 @@ export function HealthSnapshotTile(props: {
     : null
 
   return (
-    <Link
-      href="/data/health"
-      className="block rounded-lg border border-neutral-800 bg-neutral-950 p-4 hover:border-amber-900 transition-colors"
-    >
-      <div className="flex items-center justify-between mb-3">
+    <div className="relative rounded-lg border border-neutral-800 bg-neutral-950 p-4 hover:border-amber-900 transition-colors">
+      <Link
+        href="/data/health"
+        aria-label="Open Health overview"
+        className="absolute inset-0 z-0 rounded-lg"
+      />
+      <div className="relative z-10 flex items-center justify-between mb-3 pointer-events-none">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-amber-600" />
           <h3 className="text-sm font-space-grotesk text-neutral-200">Health</h3>
         </div>
         <Link
           href="/data/health/doctor-report"
-          onClick={e => e.stopPropagation()}
-          className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-500"
+          className="pointer-events-auto text-xs flex items-center gap-1 text-amber-600 hover:text-amber-500"
         >
           <FileText className="w-3 h-3" /> Report
         </Link>
       </div>
-      <div className="space-y-1.5 text-xs text-neutral-400">
+      <div className="relative z-10 space-y-1.5 text-xs text-neutral-400 pointer-events-none">
         <div>
           {bloodwork.last_panel_date
             ? `Last panel ${daysSince}d ago · ${bloodwork.out_of_range_count} markers out of range`
@@ -60,6 +61,6 @@ export function HealthSnapshotTile(props: {
         </div>
         <div>{activeSupplements} active supplements</div>
       </div>
-    </Link>
+    </div>
   )
 }

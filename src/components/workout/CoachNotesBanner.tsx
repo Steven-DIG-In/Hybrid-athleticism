@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { X, MessageSquare } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { enUS } from "date-fns/locale"
 
 interface CoachNotesBannerProps {
     note: string | null
@@ -49,7 +50,7 @@ export function CoachNotesBanner({ note, onDismiss, recalibrationNote }: CoachNo
                                 Coach adjusted
                             </span>
                             <span className="text-[10px] font-mono text-neutral-500">
-                                {formatDistanceToNow(new Date(recalibrationNote.createdAt), { addSuffix: true })}
+                                {formatDistanceToNow(new Date(recalibrationNote.createdAt), { addSuffix: true, locale: enUS })}
                             </span>
                         </div>
                         <p className="mt-1 text-xs font-inter text-neutral-100 leading-relaxed">
