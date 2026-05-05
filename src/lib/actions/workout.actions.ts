@@ -504,6 +504,26 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
         }
     }
 
+    // Counts driving the close-block CTA + nudge banner conditions.
+    let completedSessionCount = 0
+    let allSessionsResolved = false
+    if (currentMesocycle) {
+        const [{ count: completed }, { count: pendingActive }] = await Promise.all([
+            supabase.from('session_inventory')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('mesocycle_id', currentMesocycle.id)
+                .eq('status', 'completed'),
+            supabase.from('session_inventory')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('mesocycle_id', currentMesocycle.id)
+                .in('status', ['pending', 'active']),
+        ])
+        completedSessionCount = completed ?? 0
+        allSessionsResolved = (pendingActive ?? 0) === 0
+    }
+
     // Fetch all workouts for this microcycle with their exercise sets
     let sessionPool: WorkoutWithSets[] = []
     if (currentWeek) {
@@ -678,6 +698,8 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             mesocycleEndDate,
             trainingDays,
             weekViewSessions,
+            completedSessionCount,
+            allSessionsResolved,
         },
     }
 }
