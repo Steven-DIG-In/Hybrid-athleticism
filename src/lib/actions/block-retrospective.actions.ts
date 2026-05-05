@@ -75,6 +75,27 @@ export async function getLatestBlockRetrospective(): Promise<ActionResult<BlockR
   return { success: true, data: data ? (data.snapshot as unknown as BlockRetrospectiveSnapshot) : null }
 }
 
+/** Preview the snapshot WITHOUT closing — used by the pre-close confirm modal. */
+export async function previewRetrospective(
+  mesocycleId: string,
+): Promise<ActionResult<BlockRetrospectiveSnapshot>> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  // Verify ownership before running the assembler.
+  const { data: meso } = await supabase
+    .from('mesocycles').select('id').eq('id', mesocycleId).eq('user_id', user.id).maybeSingle()
+  if (!meso) return { success: false, error: 'Block not found' }
+
+  try {
+    const snap = await buildBlockRetrospectiveSnapshot(mesocycleId)
+    return { success: true, data: snap }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+}
+
 export async function getBlockRetrospective(
   mesocycleId: string,
 ): Promise<ActionResult<BlockRetrospectiveSnapshot | null>> {

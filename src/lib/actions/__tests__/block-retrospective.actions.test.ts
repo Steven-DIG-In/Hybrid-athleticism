@@ -77,6 +77,7 @@ import {
   closeMesocycle,
   getLatestBlockRetrospective,
   getBlockRetrospective,
+  previewRetrospective,
 } from '../block-retrospective.actions'
 
 describe('block-retrospective actions', () => {
@@ -168,6 +169,21 @@ describe('block-retrospective actions', () => {
       const r = await getBlockRetrospective('nope')
       expect(r.success).toBe(true)
       if (r.success) expect(r.data).toBeNull()
+    })
+  })
+
+  describe('previewRetrospective', () => {
+    it('returns the snapshot when mesocycle exists', async () => {
+      state.mesocycle = { id: 'm1', user_id: 'u1', is_active: true, is_complete: false }
+      const r = await previewRetrospective('m1')
+      expect(r.success).toBe(true)
+      if (r.success) expect(r.data.schemaVersion).toBe(1)
+    })
+
+    it('rejects when mesocycle not found', async () => {
+      state.mesocycle = null
+      const r = await previewRetrospective('nope')
+      expect(r.success).toBe(false)
     })
   })
 })
