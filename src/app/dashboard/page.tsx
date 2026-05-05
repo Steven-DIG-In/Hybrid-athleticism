@@ -4,6 +4,9 @@ import { SessionPoolClient } from "@/components/dashboard/SessionPoolClient"
 import { DashboardNoActiveBlockEmpty } from "@/components/dashboard/DashboardNoActiveBlockEmpty"
 import { CloseBlockCta } from "@/components/dashboard/CloseBlockCta"
 import { CloseBlockNudgeBanner } from "@/components/dashboard/CloseBlockNudgeBanner"
+import { createClient } from "@/lib/supabase/server"
+import { evaluateOverrunSignal } from "@/lib/analytics/overrun-signal"
+import { OverrunSignalBanner } from "@/components/reality-check/OverrunSignalBanner"
 
 export default async function DashboardPage({
     searchParams,
@@ -39,6 +42,32 @@ export default async function DashboardPage({
     const showNudge = endPassed || allResolved
     const hasAnyCompleted = (data.completedSessionCount ?? 0) > 0
 
+    // Evaluate overrun signal for the mid-block reality-check banner.
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const overrunSignal = user
+        ? await evaluateOverrunSignal(user.id)
+        : { shouldFire: false as const, evidence: null }
+
+    // Profile defaults for the modal that opens from the banner.
+    // available_days + session_duration_minutes live on profiles, not mesocycles.
+    const profileResult = user
+        ? await supabase
+            .from('profiles')
+            .select('available_days, session_duration_minutes')
+            .eq('id', user.id)
+            .maybeSingle()
+        : { data: null }
+    const profileForDefaults = profileResult.data as
+        | { available_days: number | null; session_duration_minutes: number | null }
+        | null
+    const overrunDefaults = {
+        daysPerWeek: profileForDefaults?.available_days ?? 5,
+        sessionMinutes: profileForDefaults?.session_duration_minutes ?? 60,
+        warmupMinutes: 0,
+        cooldownMinutes: 0,
+    }
+
     // Greeting based on time of day
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -60,6 +89,13 @@ export default async function DashboardPage({
                     )}
                 </div>
             </div>
+
+            {overrunSignal.shouldFire && overrunSignal.evidence && (
+                <OverrunSignalBanner
+                    evidence={overrunSignal.evidence}
+                    defaults={overrunDefaults}
+                />
+            )}
 
             {showNudge && data.currentMesocycle.end_date && (
                 <CloseBlockNudgeBanner
