@@ -157,6 +157,7 @@ BEGIN
   -- Defensive pending → missed: guard against the historical inventory drift
   -- by excluding rows with a matching completed workout. After migration 019
   -- runs, this NOT EXISTS clause becomes a no-op safety net.
+  -- Workouts FK to session_inventory directly via session_inventory_id.
   UPDATE public.session_inventory si
   SET status = 'missed'
   WHERE si.mesocycle_id = p_mesocycle_id
@@ -164,11 +165,7 @@ BEGIN
     AND NOT EXISTS (
       SELECT 1
       FROM public.workouts w
-      JOIN public.microcycles mc ON mc.id = w.microcycle_id
-      WHERE mc.mesocycle_id = si.mesocycle_id
-        AND mc.week_number = si.week_number
-        AND w.training_day = si.training_day
-        AND w.session_slot = si.session_slot
+      WHERE w.session_inventory_id = si.id
         AND w.completed_at IS NOT NULL
     );
 
@@ -221,11 +218,7 @@ WHERE si.status = 'pending'
   AND EXISTS (
     SELECT 1
     FROM public.workouts w
-    JOIN public.microcycles mc ON mc.id = w.microcycle_id
-    WHERE mc.mesocycle_id = si.mesocycle_id
-      AND mc.week_number = si.week_number
-      AND w.training_day = si.training_day
-      AND w.session_slot = si.session_slot
+    WHERE w.session_inventory_id = si.id
       AND w.completed_at IS NOT NULL
   );
 ```
