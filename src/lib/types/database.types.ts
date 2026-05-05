@@ -3294,8 +3294,8 @@ export type ExerciseSet = Tables<'exercise_sets'>
 export type CardioLog = Tables<'cardio_logs'>
 export type RuckingLog = Tables<'rucking_logs'>
 export type ConditioningLog = Tables<'conditioning_logs'>
-export type BlockRetrospectivesRow = Tables<'block_retrospectives'>
-export type BlockRetrospectivesInsert = TablesInsert<'block_retrospectives'>
+export type BlockRetrospective = Tables<'block_retrospectives'>
+export type BlockRetrospectiveInsert = TablesInsert<'block_retrospectives'>
 /**
  * AICoachIntervention — hand-written to narrow JSONB columns.
  * `Tables<'ai_coach_interventions'>` types `exercise_swaps` / `volume_adjustments`

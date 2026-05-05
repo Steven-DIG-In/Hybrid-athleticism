@@ -1,6 +1,17 @@
 -- Block Retrospective table + atomic close RPC.
 -- See docs/superpowers/specs/2026-05-05-block-retrospective-design.md
 
+-- Extend agent_activity.decision_type CHECK to allow 'block_close' audit rows.
+-- The RPC defined below writes one of these on every block close. Without
+-- this widening, the audit insert violates the CHECK and rolls back the
+-- entire close transaction. The 'coach' allow-list already includes 'head'
+-- which the RPC uses as the system-wide author for cross-coach actions.
+ALTER TABLE public.agent_activity
+  DROP CONSTRAINT IF EXISTS agent_activity_decision_type_check;
+ALTER TABLE public.agent_activity
+  ADD CONSTRAINT agent_activity_decision_type_check
+  CHECK (decision_type IN ('recalibration', 'intervention_fired', 'block_close'));
+
 CREATE TABLE public.block_retrospectives (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -53,6 +64,15 @@ BEGIN
     RAISE EXCEPTION 'mesocycle already closed';
   END IF;
 
+  -- Snapshot shape sanity-check: ensures the format() audit message below
+  -- never renders NULL pct as garbage. Failing fast at the boundary beats
+  -- recording a malformed audit row.
+  IF NOT (p_snapshot ? 'adherence'
+          AND (p_snapshot -> 'adherence') ? 'overall'
+          AND (p_snapshot -> 'adherence' -> 'overall') ? 'pct') THEN
+    RAISE EXCEPTION 'invalid snapshot shape: missing adherence.overall.pct';
+  END IF;
+
   -- Defensive pending → missed: guard against the historical inventory drift
   -- by excluding rows with a matching completed workout. After migration 019
   -- runs, this NOT EXISTS clause becomes a no-op safety net.
@@ -78,16 +98,18 @@ BEGIN
   DELETE FROM public.block_pointer
   WHERE user_id = v_user_id AND mesocycle_id = p_mesocycle_id;
 
+  -- Audit row. coach='head' = the cross-coach system author (existing
+  -- convention; same value used by other block-level decisions).
   INSERT INTO public.agent_activity (
     user_id, coach, decision_type, target_entity,
     reasoning_structured, reasoning_text
   ) VALUES (
-    v_user_id, 'system', 'block_close',
+    v_user_id, 'head', 'block_close',
     jsonb_build_object('mesocycle_id', p_mesocycle_id, 'retrospective_id', v_retro.id),
     p_snapshot -> 'adherence' -> 'overall',
     format('Closed block %s — %s%% adherence',
       v_meso.name,
-      ((p_snapshot -> 'adherence' -> 'overall' ->> 'pct'))
+      (p_snapshot -> 'adherence' -> 'overall' ->> 'pct')
     )
   );
 
