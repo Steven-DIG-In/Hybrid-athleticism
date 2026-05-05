@@ -1922,6 +1922,7 @@ export type Database = {
           movements_to_avoid: string[] | null
           onboarding_completed_at: string | null
           onboarding_path: Database["public"]["Enums"]["onboarding_path"] | null
+          pending_planner_notes: Json | null
           preferred_block_duration: number | null
           primary_goal: Database["public"]["Enums"]["mesocycle_goal"] | null
           primary_training_environment:
@@ -2007,6 +2008,7 @@ export type Database = {
           onboarding_path?:
             | Database["public"]["Enums"]["onboarding_path"]
             | null
+          pending_planner_notes?: Json | null
           preferred_block_duration?: number | null
           primary_goal?: Database["public"]["Enums"]["mesocycle_goal"] | null
           primary_training_environment?:
@@ -2094,6 +2096,7 @@ export type Database = {
           onboarding_path?:
             | Database["public"]["Enums"]["onboarding_path"]
             | null
+          pending_planner_notes?: Json | null
           preferred_block_duration?: number | null
           primary_goal?: Database["public"]["Enums"]["mesocycle_goal"] | null
           primary_training_environment?:
@@ -3205,6 +3208,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 /**
  * Profile — hand-written to match production call-site assumptions.
