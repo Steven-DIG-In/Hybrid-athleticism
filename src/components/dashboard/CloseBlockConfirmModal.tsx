@@ -34,7 +34,7 @@ export function CloseBlockConfirmModal({
         return
       }
       onClose()
-      router.push(`/data/blocks/${mesocycleId}/retrospective`)
+      router.push(`/data/blocks/${mesocycleId}/reality-check`)
       router.refresh()
     })
   }
