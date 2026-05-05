@@ -431,6 +431,41 @@ export type Database = {
           },
         ]
       }
+      block_retrospectives: {
+        Row: {
+          generated_at: string
+          id: string
+          mesocycle_id: string
+          schema_version: number
+          snapshot: Json
+          user_id: string
+        }
+        Insert: {
+          generated_at?: string
+          id?: string
+          mesocycle_id: string
+          schema_version?: number
+          snapshot: Json
+          user_id: string
+        }
+        Update: {
+          generated_at?: string
+          id?: string
+          mesocycle_id?: string
+          schema_version?: number
+          snapshot?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "block_retrospectives_mesocycle_id_fkey"
+            columns: ["mesocycle_id"]
+            isOneToOne: false
+            referencedRelation: "mesocycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       body_composition_measurements: {
         Row: {
           body_fat_pct: number | null
@@ -2764,6 +2799,23 @@ export type Database = {
         Args: { reps: number; rir?: number; weight: number }
         Returns: number
       }
+      close_mesocycle: {
+        Args: { p_mesocycle_id: string; p_snapshot: Json }
+        Returns: {
+          generated_at: string
+          id: string
+          mesocycle_id: string
+          schema_version: number
+          snapshot: Json
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "block_retrospectives"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       disconnect_garmin: { Args: never; Returns: undefined }
       read_secret: { Args: { secret_id: string }; Returns: string }
       store_garmin_credentials: {
@@ -3242,6 +3294,8 @@ export type ExerciseSet = Tables<'exercise_sets'>
 export type CardioLog = Tables<'cardio_logs'>
 export type RuckingLog = Tables<'rucking_logs'>
 export type ConditioningLog = Tables<'conditioning_logs'>
+export type BlockRetrospectivesRow = Tables<'block_retrospectives'>
+export type BlockRetrospectivesInsert = TablesInsert<'block_retrospectives'>
 /**
  * AICoachIntervention — hand-written to narrow JSONB columns.
  * `Tables<'ai_coach_interventions'>` types `exercise_swaps` / `volume_adjustments`
