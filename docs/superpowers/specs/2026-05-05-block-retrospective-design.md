@@ -22,7 +22,7 @@ The retrospective is the data spine that makes the rest of the transition framew
 - Active mesocycle: `HYBRID_PEAKING Block 1`, 6 weeks, started 2026-03-23, end-date 2026-05-02 (3 days passed; still flagged `is_active=true, is_complete=false`).
 - 51 workouts prescribed, 21 completed (~41% adherence). Last completed workout 2026-04-27.
 - Training-max recalibrations during the block: 4 (Bench 72, OHP 49.5, Deadlift 114, Row 80). Sources: 3× recalibration, 1× intervention_response.
-- Schema gap surfaced: `session_inventory.status` is in drift — only 7 rows show `'completed'` while 21 workouts have `completed_at` set (Phase 2 `completeWorkout` never updates inventory status). Healed by migration 019; source bug fixed in this same plan (Section 4.2).
+- Schema gap surfaced: `session_inventory.status` is in drift on Block 1 — 14 of 21 completed workouts have a matching inventory row still flagged `'pending'`. **Cause is historical:** all 14 drifted rows are completions from before Phase 2 (`cc4d80b`, merged 2026-04-20) shipped the `completeWorkout` → `session_inventory` state transition. Every completion logged after Phase 2 merged (the 7 from weeks of Apr 20 + Apr 27) flipped both rows correctly. Healed by one-shot migration 019. No source-bug fix needed — Phase 2 already shipped it.
 
 ---
 
@@ -73,7 +73,6 @@ The close action is one transactional PL/pgSQL RPC `close_mesocycle(p_mesocycle_
 
 ### Evolve
 
-- **`src/lib/actions/workout.actions.ts`** — `completeWorkout` now also flips the matching `session_inventory.status` to `'completed'` when it sets `workouts.completed_at`. Source-bug fix that prevents the inventory-status drift recurring in future blocks (Section 4.2).
 - **`src/app/dashboard/page.tsx`** — branches on `getActiveMesocycle()`. If null, renders `DashboardNoActiveBlockEmpty`. Otherwise, renders the existing active-block layout with `CloseBlockCta` in the header and `CloseBlockNudgeBanner` above the week view when conditions match.
 
 ### Retire
@@ -142,8 +141,9 @@ BEGIN
   END IF;
 
   -- Defensive: only flip pending → missed where no completed workout exists.
-  -- After migration 019 + the completeWorkout source fix, this NOT EXISTS clause
-  -- becomes a no-op safety net rather than load-bearing.
+  -- After migration 019 heals the historical drift on Block 1, the NOT EXISTS
+  -- clause becomes a no-op safety net rather than load-bearing (Phase 2 already
+  -- ensures live completions flip both rows in the same transaction).
   UPDATE public.session_inventory si
   SET status = 'missed'
   WHERE si.mesocycle_id = p_mesocycle_id
@@ -194,10 +194,11 @@ GRANT EXECUTE ON FUNCTION public.close_mesocycle(uuid, jsonb) TO authenticated;
 ### Data heal — migration `019_backfill_session_inventory_status.sql`
 
 ```sql
--- One-shot heal of session_inventory.status drift caused by
--- completeWorkout setting workouts.completed_at without flipping inventory.
--- The completeWorkout fix in this same plan prevents recurrence; this
--- migration only meaningfully runs once (re-runs are idempotent no-ops).
+-- One-shot heal of session_inventory.status drift on Block 1.
+-- All 14 drifted rows are completions from before Phase 2 (cc4d80b)
+-- shipped the completeWorkout → session_inventory state transition
+-- on 2026-04-20. Phase 2 prevents recurrence; this migration only
+-- meaningfully runs once (re-runs are idempotent no-ops).
 UPDATE public.session_inventory si
 SET status = 'completed', updated_at = now()
 WHERE si.status = 'pending'
@@ -344,17 +345,6 @@ GET /dashboard
        → "Start new block" → disabled placeholder for sub-project D
 ```
 
-### completeWorkout source fix
-
-```
-WorkoutLogger.complete()
-  → workout.actions.ts:completeWorkout(workoutId)
-       UPDATE workouts SET completed_at = now()
-       UPDATE session_inventory SET status='completed'
-         WHERE id = (resolved sessionInventoryId)        ← NEW
-       (existing recalibration / load-scoring / pointer-advance / check-in chain)
-```
-
 ---
 
 ## Error handling
@@ -388,7 +378,6 @@ All tests mock `@/lib/supabase/server` via `vi.mock` + `vi.hoisted`. No live-DB 
   - Already-closed: pre-check rejects.
   - Not authenticated: returns "Not authenticated".
   - RPC throws: error surfaced to caller, no partial state.
-- `completeWorkout` regression — assert it now flips `session_inventory.status` from `'pending'` to `'completed'` for the matching inventory row.
 - Component snapshot tests against fixture snapshots:
   - `BlockHeadlineTiles` (mixed adherence, 100%, 0%, no recalibrations).
   - `AdherenceByDomainTable` (all 6 domains populated, missing domains, division-by-zero guard).
