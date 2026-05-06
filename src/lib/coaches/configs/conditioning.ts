@@ -1,5 +1,13 @@
 // src/lib/coaches/configs/conditioning.ts
 import type { CoachConfig } from '../types'
+import { ConditioningProgramSchema } from '@/lib/ai/schemas/week-brief'
+import type { ConditioningProgramValidated } from '@/lib/ai/schemas/week-brief'
+import {
+  buildConditioningProgramSystemPrompt,
+  buildConditioningProgramUserPrompt,
+  buildConditioningModificationSystemPrompt,
+  buildConditioningModificationUserPrompt,
+} from '@/lib/ai/prompts/conditioning-coach'
 
 export const conditioningCoachConfig: CoachConfig = {
   id: 'conditioning',
@@ -64,4 +72,21 @@ export const conditioningCoachConfig: CoachConfig = {
     ],
   },
   alwaysActive: false,
+  programming: {
+    schema: ConditioningProgramSchema,
+    buildSystemPrompt: buildConditioningProgramSystemPrompt,
+    buildUserPrompt: buildConditioningProgramUserPrompt as (...args: unknown[]) => string,
+    buildModSystemPrompt: buildConditioningModificationSystemPrompt,
+    buildModUserPrompt: buildConditioningModificationUserPrompt as (...args: unknown[]) => string,
+    resultKey: 'conditioningProgram',
+    modifiedKey: 'modifiedConditioningSessions',
+    maxTokens: 8192,
+    temperature: 0.8,
+    modTemperature: 0.4,
+    logLabel: 'Conditioning',
+    logSummary: (d: unknown) => {
+      const data = d as ConditioningProgramValidated
+      return `${data.methodologyUsed}, ${data.weeks.length} weeks`
+    },
+  },
 }
