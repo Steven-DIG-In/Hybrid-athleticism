@@ -250,6 +250,22 @@ No single-user-isms requiring fixes. The relocated action operates on a caller-s
 - `src/lib/engine/mesocycle/context.ts:267` — `let loadSummary` is function-local, not module-scope cache. No fix needed.
 - `src/lib/engine/mesocycle/strategy.ts` — pure helper, no I/O. No findings.
 
+### Task 12 — engine/microcycle/
+
+One single-user-ism fixed during the move; the rest of the relocated body was already user-scoped end-to-end.
+
+- `src/lib/engine/microcycle/generate-pool.ts:559-595` (`regenerateCurrentWeekPool`, the date-based current/upcoming microcycle lookup) — pattern: `.from('microcycles')` queries used `.lte/.gte('start_date', today)` ranges scoped only by `user_id`, with no constraint on which mesocycle the microcycle belonged to. Under multiple historical mesocycles per user, an old archived mesocycle could overlap "today" and shadow the active one. Fix applied: added `mesocycles!inner(is_active)` join + `.eq('mesocycles.is_active', true)` to both the date-range and fall-back-to-upcoming queries. Behavior-preserving for single user because Steven only ever has one active mesocycle at a time, so the join filters to the same row that would have matched without the join.
+- `src/lib/engine/microcycle/generate-pool.ts:62-71` (`generateSessionPool`, microcycle load) — already pairs `.eq('id', microcycleId).eq('user_id', user.id)` and joins `mesocycles!inner` on the foreign key. No fix needed.
+- `src/lib/engine/microcycle/generate-pool.ts:91-110` — injuries / benchmarks / recent_training all filtered by `user_id` (and `is_active=true` on injuries). No fix needed.
+- `src/lib/engine/microcycle/generate-pool.ts:506-541` (`generateNextWeekPool`) — already filters `mesocycles.is_active=true` and `user_id`. No fix needed.
+- `src/lib/engine/microcycle/adjust.ts:51-122` (`runWeeklyRecoveryCheck`) — `auth.getUser()` at entry; microcycle load + persistence write both pair `.eq('id', microcycleId).eq('user_id', user.id)`. No fix needed.
+- `src/lib/engine/microcycle/adjust.ts:368-426` (`computeMuscleGroupVolumes`) — workouts query scoped by `microcycle_id` AND `user_id`; exercise_sets joined via `workout_id IN (...)` on rows already user-scoped. No fix needed.
+- `src/lib/engine/microcycle/adjust.ts:432-489` (`loadNextWeekSessions`) — microcycle lookup by composite `(mesocycle_id, week_number, user_id)` is unique by construction; workouts query scoped by `microcycle_id` AND `user_id`. No fix needed.
+- `src/lib/engine/microcycle/persistence.ts` — pure helpers; both DB writes (`exercise_sets`, `cardio_logs`) include `user_id` in inserted rows. No findings.
+- `src/lib/engine/microcycle/adjust.ts:155-157,199` — `let missedSessions / completedSessions / totalSessions / recoveryScore` are function-local accumulators, NOT module-scope caches. No fix needed.
+- `src/lib/engine/microcycle/generate-pool.ts:126,229,278,309,400` — `let` declarations are function-local conditionals or loop counters. No fix needed.
+- `src/lib/engine/mesocycle/context.ts:295` (`deduplicateBenchmarks`) — flipped from private to `export function` so the relocated `generate-pool.ts` and the still-resident `regenerateSingleSession` (Task 13) can share the implementation rather than duplicate it. Behavior-preserving because both prior copies relied on a benchmarks list pre-sorted by `created_at DESC`, under which "first-seen-wins" (the kept copy) and "max-created_at-wins" (the deleted copy) produce identical output.
+
 ## Verification
 
 ### Safety-net snapshot

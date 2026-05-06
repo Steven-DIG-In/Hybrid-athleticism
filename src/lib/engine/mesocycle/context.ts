@@ -292,7 +292,7 @@ async function loadPreviousWeekData(
 
 // ─── Helper: Deduplicate Benchmarks ─────────────────────────────────────────
 
-function deduplicateBenchmarks(benchmarks: AthleteBenchmark[]): AthleteBenchmark[] {
+export function deduplicateBenchmarks(benchmarks: AthleteBenchmark[]): AthleteBenchmark[] {
     const seen = new Map<string, AthleteBenchmark>()
     for (const b of benchmarks) {
         if (!seen.has(b.benchmark_name)) {
