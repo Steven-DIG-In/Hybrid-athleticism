@@ -3,7 +3,7 @@
 **Status:** Spec
 **Date:** 2026-05-06
 **Sub-project:** C of four (A shipped, B shipped, C this spec, D pending)
-**Mode:** Split + light cleanup (no behavior changes)
+**Mode:** Split + light cleanup + multi-user-readiness fixes
 
 ## Why
 
@@ -21,6 +21,8 @@ Sub-project D (Block 2 wizard) needs to call into one obvious mesocycle-generati
 
 A second motivation: the orchestrator advertises itself as "config-driven" but is only half so. It iterates the `coachRegistry` registry, then reaches into a 90-line hardcoded `getDomainMeta()` map for everything that actually defines a coach (its schema, prompts, sampling parameters). That parallel map duplicates information the coach config files should own. C closes that gap.
 
+A third motivation: the engine is multi-user-architected but single-user-tested. Onboarding routes through these same actions, so the moment a second athlete onboards, any latent single-user-ism in the engine surfaces. Since the refactor reads every line of these files anyway, fixing single-user-isms in-place is cheaper than logging them now and revisiting later.
+
 ## Goals
 
 1. The three monoliths become a focused `src/lib/engine/` tree organized by training lifecycle level (mesocycle / microcycle / session / scheduling), with a `_shared/` subtree for cross-cutting helpers.
@@ -30,17 +32,17 @@ A second motivation: the orchestrator advertises itself as "config-driven" but i
    - `generateFirstWeekPool`
 4. Sub-project D's wizard imports from a single path: `@/lib/engine/mesocycle/generate`.
 5. A single shape-equality vitest snapshot guards the coach-metadata transcription step.
-6. A read-only audit pass surfaces single-user-isms in engine code, logged in this spec, deferred to a future sub-project unless trivially fixable.
+6. Single-user-isms in engine code get fixed in-place during each file move. Findings still logged for transparency, but the default disposition is *fix* not *defer*.
 
 ## Non-goals
 
-- No behavioral changes to AI prompts, DB writes, schemas, or pipeline structure.
+- No behavioral changes to AI prompts, DB writes, schemas, or pipeline structure for the live single-user case. Multi-user-readiness fixes are explicitly behavior-preserving for the current single user (e.g. adding `is_active=true` predicates, per-user-keying caches, adding missing `auth.getUser()` calls — none change what Steven sees).
 - No new features.
 - No schema migrations.
 - No skill-input dispatch refactor (`buildSkillInput` switch stays as-is for now).
 - No test-coverage increase beyond the one safety-net snapshot.
 - No work on `recalibration.actions.ts`, `inventory.actions.ts`, or other adjacent action files.
-- No multi-user fixes — the audit (Section 5) only logs findings.
+- Multi-user-readiness fixes are scoped to engine files being touched by the refactor. Fixes that require structural changes spanning files outside the refactor's scope get logged and deferred (not silently expanded).
 
 ## Scope
 
@@ -193,31 +195,42 @@ Hygiene rule applies: zero callers post-action-deletion → delete in the same c
 6. **`tsc --noEmit` passes after each commit.** If a move breaks types, the same commit fixes them.
 7. **Final-pass sweep.** Last commit lists every file under `src/lib/engine/` with line counts. Any file under ~15 LOC that is just a re-export gets folded or deleted.
 
-## Single-user-isms audit
+## Single-user-isms — fix-as-we-go
 
-Read-only pass during the refactor. Each engine file gets a 5-min skim looking for these patterns. Findings get logged in this spec under `## Audit findings` (populated during execution). Fixed only if trivial; otherwise filed as backlog notes for a future "multi-user readiness" sub-project.
+Each engine file gets read closely during its move commit. Single-user-isms found inside an engine file get **fixed in the same commit as the move**. Findings (and their resolutions) log in `## Audit findings` below for review-time visibility.
 
-### Patterns flagged
+### Patterns and default fixes
 
-| Pattern | Why it matters |
+| Pattern | Default fix |
 |---|---|
-| Module-scope `let` (caches, last-result memos) | Leaks state between users in serverless / Fluid Compute |
-| `async function foo() { ... }` with no `auth.getUser()` and no explicit `userId` param | Implicit single-user assumption |
-| Queries without `.eq('user_id', user.id)` (excluding RPC calls and registry-style reads) | RLS catches it but defense-in-depth lost |
-| Hardcoded `LIMIT 1` on `.from('mesocycles')` without `is_active=true` | Works today because there's one user, breaks under multiple active mesocycles |
-| `Promise` deduping or in-flight maps not keyed by user | Cross-user request blending |
+| Module-scope `let` cache / last-result memo | Delete the cache, or convert to a `Map<userId, T>` with explicit eviction. Default lean: delete unless there's clear evidence it matters for performance. |
+| Action body without `auth.getUser()` or explicit `userId` param | Add `auth.getUser()` at the top; return `{ success: false, error: 'Not authenticated' }` on failure (matches the existing `ActionResult` pattern). |
+| Queries without `.eq('user_id', user.id)` (non-RPC, non-registry reads) | Add the predicate. Defense-in-depth even with RLS. |
+| `LIMIT 1` on `.from('mesocycles')` without `is_active=true` | Add `.eq('is_active', true)` so the query is correct under multiple historical mesocycles per user. |
+| `LIMIT 1` on `.from('microcycles')` without explicit ordering | Add `.order('week_number', ascending: ...)` matching the call's intent. |
+| `Promise` deduping / in-flight map not keyed by user | Per-user-key it, or remove if unused. |
+| Hardcoded route assumptions in `revalidatePath` | Leave as-is unless the route itself is user-scoped (these are global cache invalidations and acceptable). |
+
+### Default = fix. Escape hatch = defer.
+
+If a finding requires structural rework that spills outside the engine file being touched (e.g., a shared helper in `src/lib/scheduling/` would need to change too, or a database query pattern repeats across non-engine actions), the fix gets **deferred** — logged with a `DEFER:` marker and a one-line reason. Deferring is rare; the default disposition is fix.
+
+### Verification of fixes
+
+Each multi-user fix is behavior-preserving for Steven (the single live user). The snapshot test does not catch these (it only guards coach metadata), so the gates are:
+
+- `tsc --noEmit` (catches missing-arg / type drift if a function signature changes).
+- `npm test` (existing tests must still pass — many indirectly exercise the modified code paths).
+- Commit-level review of the fix list — every fix must include a one-line *why this is behavior-preserving for one user* note in the commit body.
+- Manual smoke on Vercel preview at end of refactor (Steven runs one generate-pool action).
 
 ### Output format
 
-Each finding logged as: `file:line — pattern — fix-or-defer`.
-
-### Out of scope
-
-The audit reads, it doesn't refactor. Findings that need structural changes (e.g., a global cache that needs per-user keying) go into a backlog note for a future sub-project — not into C.
+Each finding logged as: `file:line — pattern — fix-applied | DEFER: <one-line reason>`.
 
 ## Audit findings
 
-*(Populated during execution. Empty in spec form.)*
+*(Populated during execution. Empty in spec form. Each commit that touches an engine file appends its findings here in the same commit.)*
 
 ## Verification
 
@@ -322,46 +335,51 @@ Commit ordering is constrained by the snapshot dance.
    - generateMesocyclePlan, generateFirstWeekPool deleted.
    - Helpers/schemas/prompt-builders that drop to zero callers also delete (hygiene rule 3).
 
-10. refactor(engine): create engine/_shared/ helpers
+10. refactor(engine): create engine/_shared/ helpers + audit-fix
     - buildSkillInput, executeAssignedSkills, buildPreComputedAddendum,
       buildDomainUserPromptArgs, buildModSessions, buildMethodologyContext
       relocate.
+    - Each relocated helper read for single-user-isms; fixes applied in same commit.
+    - Spec `## Audit findings` updated.
     - Old files import from new locations.
 
-11. refactor(engine): create engine/mesocycle/
+11. refactor(engine): create engine/mesocycle/ + audit-fix
     - generateMesocycleWithCoaches (caller wrapper) + generateMesocycleProgram
       (orchestrator pipeline) merge into engine/mesocycle/generate.ts.
     - extractWeekBrief, hasCoach move to engine/mesocycle/strategy.ts.
+    - Single-user-ism audit on each moved function; fixes applied in same commit.
+    - Spec `## Audit findings` updated.
     - Onboarding callsite import updated.
     - Old halves of coaching.actions.ts and orchestrator.ts removed.
 
-12. refactor(engine): create engine/microcycle/
+12. refactor(engine): create engine/microcycle/ + audit-fix
     - generateSessionPool, generateNextWeekPool, regenerateCurrentWeekPool move
       to engine/microcycle/generate-pool.ts.
     - runWeeklyRecoveryCheck (caller wrapper) + runWeeklyAdjustment + runAdjustmentPipeline
       merge into engine/microcycle/adjust.ts.
     - insertLiftingSets, insertEnduranceTarget, buildCoachNotes, mapModality,
       deduplicateBenchmarks move to engine/microcycle/persistence.ts.
+    - Single-user-ism audit on each moved function; fixes applied in same commit.
+    - Spec `## Audit findings` updated.
     - Dashboard imports updated.
 
-13. refactor(engine): create engine/session/ + engine/scheduling/
+13. refactor(engine): create engine/session/ + engine/scheduling/ + audit-fix
     - regenerateSingleSession → engine/session/regenerate.ts.
     - allocateSessionDates → engine/scheduling/allocate.ts.
     - deallocateAllSessions → engine/scheduling/deallocate.ts.
+    - Single-user-ism audit on each moved function; fixes applied in same commit.
+    - Spec `## Audit findings` updated.
     - SessionRegenDrawer + auto-assign imports updated.
 
 14. refactor(engine): delete now-empty source files
     - programming.actions.ts, coaching.actions.ts, orchestrator.ts removed.
     - Final grep sweep for orphan references (per hygiene rule 2).
-
-15. test(audit): single-user-isms audit log + spec update
-    - Read-only pass. This spec's `## Audit findings` section populated.
-    - No code changes (or minimal trivial fixes).
+    - Final hygiene rule 7 sweep (file-size eyeball).
 ```
 
 Each commit independently builds and passes tests. No "broken in commit 7, fixed in commit 8" sequences. If a commit cannot be made green standalone, it splits or merges with its neighbor.
 
-All commits use `refactor:` or `test:` prefix. No `feat:` commits — no behavior changes.
+Commits use `refactor:` or `test:` prefix. The audit-fix portions are batched inside the relocation commit they belong to — keeping the fix next to the move it accompanies makes the diff easier to review than a trailing audit-only commit. Each affected commit body lists the audit findings it resolved.
 
 ## Risks
 
@@ -371,12 +389,13 @@ All commits use `refactor:` or `test:` prefix. No `feat:` commits — no behavio
 | Caller import path missed during a move | tsc fails the commit |
 | Helper relocated when it should have been deleted (hidden orphan) | Hygiene rule 7 final sweep + grep audit |
 | Dead-action audit misses a runtime caller (e.g. dynamic import) | Pre-deletion grep includes `--include="*.tsx"`; manual smoke on Vercel preview |
-| Single-user-ism fix snuck in beyond audit scope | Code review of commit 15 limits diff to spec doc |
+| Single-user-ism fix accidentally changes single-user behavior | Each fix's commit body must include a one-line "behavior-preserving for single user because…" note; existing test suite must stay green; manual smoke at end |
+| Audit-fix scope creep into files outside the refactor | Findings that span outside engine files get logged with `DEFER:` marker, not silently expanded |
 
 ## Out-of-scope items flagged for future sub-projects
 
 - Skill-input dispatch refactor (`buildSkillInput` switch → `skill.buildInput()` interface). Filed for post-D consideration.
-- Multi-user readiness fixes derived from the audit. Filed as a separate sub-project once the multi-user product motion exists.
+- Multi-user readiness fixes outside engine files. The in-engine fixes happen here; anything spanning outside engine files gets logged with `DEFER:` and filed as a separate sub-project.
 - Test-coverage backfill on the engine actions. The shape-equality snapshot is deliberately the only safety net; broader coverage is a separate effort.
 
 ## Dependencies
