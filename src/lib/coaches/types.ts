@@ -1,5 +1,6 @@
 // src/lib/coaches/types.ts
 import type { CoachDomain } from '@/lib/skills/types'
+import type { ProgrammingMeta } from '@/lib/engine/types'
 
 export interface CoachConfig {
   id: CoachDomain
@@ -36,4 +37,5 @@ export interface CoachConfig {
     tier3AthleteConfirms: string[]
   }
   alwaysActive: boolean
+  programming?: ProgrammingMeta
 }

@@ -1,5 +1,13 @@
 // src/lib/coaches/configs/hypertrophy.ts
 import type { CoachConfig } from '../types'
+import { HypertrophyProgramSchema } from '@/lib/ai/schemas/week-brief'
+import type { HypertrophyProgramValidated } from '@/lib/ai/schemas/week-brief'
+import {
+  buildHypertrophyProgramSystemPrompt,
+  buildHypertrophyProgramUserPrompt,
+  buildHypertrophyModificationSystemPrompt,
+  buildHypertrophyModificationUserPrompt,
+} from '@/lib/ai/prompts/hypertrophy-coach'
 
 export const hypertrophyCoachConfig: CoachConfig = {
   id: 'hypertrophy',
@@ -65,4 +73,21 @@ export const hypertrophyCoachConfig: CoachConfig = {
     ],
   },
   alwaysActive: false,
+  programming: {
+    schema: HypertrophyProgramSchema,
+    buildSystemPrompt: buildHypertrophyProgramSystemPrompt,
+    buildUserPrompt: buildHypertrophyProgramUserPrompt as (...args: unknown[]) => string,
+    buildModSystemPrompt: buildHypertrophyModificationSystemPrompt,
+    buildModUserPrompt: buildHypertrophyModificationUserPrompt as (...args: unknown[]) => string,
+    resultKey: 'hypertrophyProgram',
+    modifiedKey: 'modifiedHypertrophySessions',
+    maxTokens: 8192,
+    temperature: 0.7,
+    modTemperature: 0.4,
+    logLabel: 'Hypertrophy',
+    logSummary: (d: unknown) => {
+      const data = d as HypertrophyProgramValidated
+      return `${data.splitDesign}, ${data.weeks.length} weeks`
+    },
+  },
 }

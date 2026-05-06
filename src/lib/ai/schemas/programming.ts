@@ -132,22 +132,6 @@ export const MesocyclePlanSchema = z.object({
     weeks: z.array(WeeklySessionPoolSchema).min(1).describe('Session pools for each programmed week'),
 })
 
-// ─── Mesocycle Overview Plan Schema ────────────────────────────────────────
-
-export const MesocycleOverviewPlanSchema = z.object({
-    volumeProgressionCurve: z.array(z.object({
-        weekNumber: z.number().int(),
-        volumePercent: z.number().min(40).max(110).describe('Volume as % of MRV target'),
-        emphasis: z.string().describe('Primary training emphasis this week (e.g., "strength accumulation", "endurance volume build", "deload recovery")'),
-        isDeload: z.boolean(),
-    })).min(4).max(8),
-    blockEmphasis: z.string().describe('Overall block emphasis and periodization strategy (2-3 sentences)'),
-    deloadTiming: z.string().describe('When and why deloads are placed'),
-    keyProgressions: z.array(z.string()).min(3).max(5).describe('The 3-5 key progressions planned across the block'),
-})
-
-export type MesocycleOverviewPlan = z.infer<typeof MesocycleOverviewPlanSchema>
-
 // ─── Archetype-Validated Session Pool Schema ──────────────────────────────
 
 const ARCHETYPE_DISTRIBUTION: Record<string, {

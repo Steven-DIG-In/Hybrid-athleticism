@@ -1,23 +1,20 @@
-'use server'
-
 /**
- * Multi-Agent Coaching Actions
+ * Mesocycle context builders (Task 11 — engine refactor).
  *
- * Server actions for the coaching staff architecture (Phase 1).
- * These wrap the orchestrator pipelines and handle Supabase persistence.
+ * Pure helpers that load and shape the AthleteContextPacket and derived
+ * methodology-context objects consumed by the mesocycle generation
+ * pipeline. Relocated from `src/lib/actions/coaching.actions.ts` so the
+ * engine layer owns its own context construction.
  *
- * Pipeline A: generateMesocycleWithCoaches() — full mesocycle generation
- * Pipeline B: runWeeklyRecoveryCheck() — weekly check-in + adjustment
- *
- * All 5 domain coaches: Strength, Endurance, Hypertrophy, Conditioning, Mobility.
- * These run ALONGSIDE the existing programming.actions.ts during Phase 1.
- * Once validated, they will replace the monolithic generateSessionPool().
+ * NOTE: this file does NOT carry a 'use server' directive — it is a
+ * non-action helper module imported by both the engine action
+ * (`engine/mesocycle/generate.ts`) and the remaining action in
+ * `coaching.actions.ts` (`runWeeklyRecoveryCheck`).
  */
 
 import { createClient } from '@/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
-import type { ActionResult } from '@/lib/types/training.types'
-import type { AthleteBenchmark, Workout } from '@/lib/types/database.types'
+import type { ActionResult, WorkoutWithSets } from '@/lib/types/training.types'
+import type { AthleteBenchmark } from '@/lib/types/database.types'
 import type {
     AthleteContextPacket,
     CoachingTeamEntry,
@@ -26,10 +23,7 @@ import type {
 } from '@/lib/types/coach-context'
 import type { MethodologyContext } from '@/lib/ai/prompts/programming'
 import type { EnduranceMethodologyContext } from '@/lib/ai/prompts/endurance-coach'
-import type { MesocycleGenerationResult, WeeklyAdjustmentResult } from '@/lib/ai/orchestrator'
-import { generateMesocycleProgram, runWeeklyAdjustment } from '@/lib/ai/orchestrator'
 import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
-import type { WorkoutWithSets } from '@/lib/types/training.types'
 import {
     calculate531Wave,
     resolveTrainingMaxForExercise,
@@ -87,7 +81,7 @@ function resolveCoachingTeam(
  * Load all athlete data from Supabase and build the AthleteContextPacket.
  * This is the shared Phase 0 — built once, filtered per coach.
  */
-async function buildAthleteContext(
+export async function buildAthleteContext(
     userId: string,
     mesocycleId: string,
     weekNumber: number,
@@ -296,185 +290,21 @@ async function loadPreviousWeekData(
     return { sessions, loadSummary }
 }
 
-// ─── Pipeline A: Generate Mesocycle with Coaching Staff ─────────────────────
+// ─── Helper: Deduplicate Benchmarks ─────────────────────────────────────────
 
-/**
- * Generate a full mesocycle program using the multi-agent coaching architecture.
- *
- * All 5 domain coaches run in parallel: Strength, Endurance, Hypertrophy,
- * Conditioning, Mobility.
- * Stores strategy and programs on the mesocycle for downstream use.
- */
-export async function generateMesocycleWithCoaches(
-    mesocycleId: string
-): Promise<ActionResult<MesocycleGenerationResult>> {
-    const supabase = await createClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-        return { success: false, error: 'Not authenticated' }
+export function deduplicateBenchmarks(benchmarks: AthleteBenchmark[]): AthleteBenchmark[] {
+    const seen = new Map<string, AthleteBenchmark>()
+    for (const b of benchmarks) {
+        if (!seen.has(b.benchmark_name)) {
+            seen.set(b.benchmark_name, b)
+        }
     }
-
-    // Build athlete context
-    const ctxResult = await buildAthleteContext(user.id, mesocycleId, 1)
-    if (!ctxResult.success) {
-        return { success: false, error: ctxResult.error }
-    }
-    const ctx = ctxResult.data
-
-    // Build methodology context for the Strength Coach
-    const methodologyContext = await buildStrengthMethodologyContext(
-        ctx.profile,
-        ctx.benchmarks,
-        1,
-        ctx.totalWeeks,
-        ctx.isDeload
-    )
-
-    // Build methodology context for the Endurance Coach
-    const enduranceMethodologyContext = buildEnduranceMethodologyContext(
-        ctx.profile,
-        ctx.benchmarks
-    )
-
-    // Build volume targets for the Hypertrophy Coach
-    const volumeTargets = buildVolumeTargetsString(
-        ctx.profile,
-        1,
-        ctx.totalWeeks,
-        ctx.isDeload
-    )
-
-    // Run Pipeline A (all domain coaches run in parallel)
-    const result = await generateMesocycleProgram(
-        ctx,
-        methodologyContext,
-        enduranceMethodologyContext,
-        volumeTargets
-    )
-
-    if (!result.success) {
-        return { success: false, error: result.error }
-    }
-
-    // Persist strategy + all domain programs to mesocycle
-    await supabase
-        .from('mesocycles')
-        .update({
-            mesocycle_strategy: result.data.strategy as unknown as Record<string, unknown>,
-            strength_program: result.data.strengthProgram
-                ? (result.data.strengthProgram as unknown as Record<string, unknown>)
-                : null,
-            endurance_program: result.data.enduranceProgram
-                ? (result.data.enduranceProgram as unknown as Record<string, unknown>)
-                : null,
-            hypertrophy_program: result.data.hypertrophyProgram
-                ? (result.data.hypertrophyProgram as unknown as Record<string, unknown>)
-                : null,
-            conditioning_program: result.data.conditioningProgram
-                ? (result.data.conditioningProgram as unknown as Record<string, unknown>)
-                : null,
-            mobility_program: result.data.mobilityProgram
-                ? (result.data.mobilityProgram as unknown as Record<string, unknown>)
-                : null,
-            ai_context_json: {
-                orchestratorVersion: 'full',
-                generatedAt: new Date().toISOString(),
-                coachingTeam: ctx.coachingTeam,
-            },
-        })
-        .eq('id', mesocycleId)
-        .eq('user_id', user.id)
-
-    revalidatePath('/dashboard')
-    return result
-}
-
-// ─── Pipeline B: Weekly Recovery Check ──────────────────────────────────────
-
-/**
- * Run the weekly recovery check-in for a specific microcycle.
- *
- * Recovery Coach reviews last week's data → GREEN/YELLOW/RED.
- * If YELLOW/RED: Head Coach issues directive → Strength Coach modifies.
- */
-export async function runWeeklyRecoveryCheck(
-    microcycleId: string
-): Promise<ActionResult<WeeklyAdjustmentResult>> {
-    const supabase = await createClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-        return { success: false, error: 'Not authenticated' }
-    }
-
-    // Load microcycle
-    const { data: microcycle, error: mcError } = await supabase
-        .from('microcycles')
-        .select('*, mesocycles!inner(id, goal, week_count)')
-        .eq('id', microcycleId)
-        .eq('user_id', user.id)
-        .single()
-
-    if (mcError || !microcycle) {
-        return { success: false, error: 'Microcycle not found' }
-    }
-
-    const mesocycleData = microcycle.mesocycles as {
-        id: string
-        goal: string
-        week_count: number
-    }
-
-    // Build athlete context with previous week data
-    const ctxResult = await buildAthleteContext(
-        user.id,
-        mesocycleData.id,
-        microcycle.week_number,
-        { includePreviousWeek: true }
-    )
-    if (!ctxResult.success) {
-        return { success: false, error: ctxResult.error }
-    }
-    const ctx = ctxResult.data
-
-    // Build muscle group volumes from exercise sets
-    const muscleGroupVolumes = await computeMuscleGroupVolumes(user.id, microcycleId)
-
-    // Build next week's sessions for adjustment context
-    const nextWeekSessions = await loadNextWeekSessions(
-        user.id,
-        mesocycleData.id,
-        microcycle.week_number + 1
-    )
-
-    // Run Pipeline B
-    const result = await runWeeklyAdjustment(ctx, muscleGroupVolumes, nextWeekSessions)
-
-    if (!result.success) {
-        return { success: false, error: result.error }
-    }
-
-    // Persist recovery assessment to microcycle
-    await supabase
-        .from('microcycles')
-        .update({
-            recovery_status: result.data.recovery.status,
-            recovery_assessment: result.data.recovery as unknown as Record<string, unknown>,
-            adjustment_directive: result.data.directive
-                ? (result.data.directive as unknown as Record<string, unknown>)
-                : null,
-        })
-        .eq('id', microcycleId)
-        .eq('user_id', user.id)
-
-    revalidatePath('/dashboard')
-    return result
+    return Array.from(seen.values())
 }
 
 // ─── Helper: Build Strength Methodology Context ─────────────────────────────
 
-async function buildStrengthMethodologyContext(
+export async function buildStrengthMethodologyContext(
     profile: { strength_methodology?: string | null; lifting_experience?: string | null },
     benchmarks: AthleteBenchmark[],
     weekNumber: number,
@@ -528,138 +358,9 @@ async function buildStrengthMethodologyContext(
     return undefined
 }
 
-// ─── Helper: Compute Muscle Group Volumes ───────────────────────────────────
-
-async function computeMuscleGroupVolumes(
-    userId: string,
-    microcycleId: string
-): Promise<Array<{
-    muscleGroup: string
-    setsThisWeek: number
-    targetSets: number
-    totalTonnageKg: number
-    avgRIR: number | null
-}> | undefined> {
-    const supabase = await createClient()
-
-    const { data: workouts } = await supabase
-        .from('workouts')
-        .select('id')
-        .eq('microcycle_id', microcycleId)
-        .eq('user_id', userId)
-
-    if (!workouts || workouts.length === 0) return undefined
-
-    const workoutIds = workouts.map(w => w.id)
-    const { data: sets } = await supabase
-        .from('exercise_sets')
-        .select('muscle_group, target_reps, target_weight_kg, actual_reps, actual_weight_kg, rir_actual')
-        .in('workout_id', workoutIds)
-
-    if (!sets || sets.length === 0) return undefined
-
-    const grouped = new Map<string, {
-        sets: number
-        tonnage: number
-        rirSum: number
-        rirCount: number
-    }>()
-
-    for (const s of sets) {
-        const mg = s.muscle_group ?? 'unknown'
-        const existing = grouped.get(mg) ?? { sets: 0, tonnage: 0, rirSum: 0, rirCount: 0 }
-        existing.sets += 1
-        const weight = s.actual_weight_kg ?? s.target_weight_kg ?? 0
-        const reps = s.actual_reps ?? s.target_reps ?? 0
-        existing.tonnage += weight * reps
-        if (s.rir_actual !== null) {
-            existing.rirSum += s.rir_actual
-            existing.rirCount += 1
-        }
-        grouped.set(mg, existing)
-    }
-
-    return Array.from(grouped.entries()).map(([muscleGroup, data]) => ({
-        muscleGroup,
-        setsThisWeek: data.sets,
-        targetSets: 0, // Would come from strategy — simplified for Phase 1
-        totalTonnageKg: data.tonnage,
-        avgRIR: data.rirCount > 0 ? data.rirSum / data.rirCount : null,
-    }))
-}
-
-// ─── Helper: Load Next Week Sessions ────────────────────────────────────────
-
-async function loadNextWeekSessions(
-    userId: string,
-    mesocycleId: string,
-    nextWeekNumber: number
-): Promise<Array<{ coach: string; sessionName: string; exercises?: string[] }> | undefined> {
-    const supabase = await createClient()
-
-    const { data: nextMicrocycle } = await supabase
-        .from('microcycles')
-        .select('id')
-        .eq('mesocycle_id', mesocycleId)
-        .eq('week_number', nextWeekNumber)
-        .eq('user_id', userId)
-        .maybeSingle()
-
-    if (!nextMicrocycle) return undefined
-
-    const { data: workouts } = await supabase
-        .from('workouts')
-        .select('id, name, modality')
-        .eq('microcycle_id', nextMicrocycle.id)
-        .eq('user_id', userId)
-
-    if (!workouts || workouts.length === 0) return undefined
-
-    const result: Array<{ coach: string; sessionName: string; exercises?: string[] }> = []
-
-    for (const w of workouts) {
-        // Map modality to coach type
-        const coach = w.modality === 'lifting' ? 'strength'
-            : w.modality === 'cardio' ? 'endurance'
-            : w.modality === 'conditioning' ? 'conditioning'
-            : w.modality === 'mobility' ? 'mobility'
-            : 'strength'
-
-        // Load exercise names
-        const { data: sets } = await supabase
-            .from('exercise_sets')
-            .select('exercise_name')
-            .eq('workout_id', w.id)
-
-        const uniqueExercises = sets
-            ? [...new Set(sets.map(s => s.exercise_name))]
-            : undefined
-
-        result.push({
-            coach,
-            sessionName: w.name,
-            exercises: uniqueExercises,
-        })
-    }
-
-    return result
-}
-
-// ─── Helper: Deduplicate Benchmarks ─────────────────────────────────────────
-
-function deduplicateBenchmarks(benchmarks: AthleteBenchmark[]): AthleteBenchmark[] {
-    const seen = new Map<string, AthleteBenchmark>()
-    for (const b of benchmarks) {
-        if (!seen.has(b.benchmark_name)) {
-            seen.set(b.benchmark_name, b)
-        }
-    }
-    return Array.from(seen.values())
-}
-
 // ─── Helper: Build Endurance Methodology Context ────────────────────────────
 
-function buildEnduranceMethodologyContext(
+export function buildEnduranceMethodologyContext(
     profile: {
         endurance_methodology?: string | null
         available_days?: number | null
@@ -704,7 +405,7 @@ function buildEnduranceMethodologyContext(
 
 // ─── Helper: Build Volume Targets String for Hypertrophy Coach ───────────────
 
-function buildVolumeTargetsString(
+export function buildVolumeTargetsString(
     profile: { lifting_experience?: string | null },
     weekNumber: number,
     totalWeeks: number,

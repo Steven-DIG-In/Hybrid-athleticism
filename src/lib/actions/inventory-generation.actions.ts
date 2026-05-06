@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types/training.types'
 import type { SessionInventory } from '@/lib/types/inventory.types'
-import { generateSessionPool } from './programming.actions'
+import { generateSessionPool } from '@/lib/engine/microcycle/generate-pool'
 import { suggestAllocation, applyAllocation } from './inventory.actions'
 
 /**

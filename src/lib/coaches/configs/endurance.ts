@@ -1,5 +1,13 @@
 // src/lib/coaches/configs/endurance.ts
 import type { CoachConfig } from '../types'
+import { EnduranceProgramSchema } from '@/lib/ai/schemas/week-brief'
+import type { EnduranceProgramValidated } from '@/lib/ai/schemas/week-brief'
+import {
+  buildEnduranceProgramSystemPrompt,
+  buildEnduranceProgramUserPrompt,
+  buildEnduranceModificationSystemPrompt,
+  buildEnduranceModificationUserPrompt,
+} from '@/lib/ai/prompts/endurance-coach'
 
 export const enduranceCoachConfig: CoachConfig = {
   id: 'endurance',
@@ -65,4 +73,21 @@ export const enduranceCoachConfig: CoachConfig = {
     ],
   },
   alwaysActive: false,
+  programming: {
+    schema: EnduranceProgramSchema,
+    buildSystemPrompt: buildEnduranceProgramSystemPrompt,
+    buildUserPrompt: buildEnduranceProgramUserPrompt as (...args: unknown[]) => string,
+    buildModSystemPrompt: buildEnduranceModificationSystemPrompt,
+    buildModUserPrompt: buildEnduranceModificationUserPrompt as (...args: unknown[]) => string,
+    resultKey: 'enduranceProgram',
+    modifiedKey: 'modifiedEnduranceSessions',
+    maxTokens: 8192,
+    temperature: 0.7,
+    modTemperature: 0.4,
+    logLabel: 'Endurance',
+    logSummary: (d: unknown) => {
+      const data = d as EnduranceProgramValidated
+      return `${data.modalitySummary}, ${data.weeks.length} weeks`
+    },
+  },
 }
