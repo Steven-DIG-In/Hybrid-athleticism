@@ -26,6 +26,8 @@ import {
 import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
 import { buildMethodologyContext } from '@/lib/engine/_shared/methodology-context'
 import { deduplicateBenchmarks } from '@/lib/engine/mesocycle/context'
+import { extractWeekBrief } from '@/lib/engine/mesocycle/strategy'
+import { MesocycleStrategySchema, type MesocycleStrategyValidated } from '@/lib/ai/schemas/week-brief'
 import {
     insertLiftingSets,
     insertEnduranceTarget,
@@ -341,9 +343,49 @@ export async function generateSessionPool(
         mesocyclePlan,
     }
 
+    // ─── Step 5b: Read head-coach strategy from mesocycle.ai_context_json ────
+    // (set by D's wizard). Backward-compatible: if no strategy (Block 1),
+    // weekBriefs is [] and the prompt falls back to today's behavior.
+    let strategy: MesocycleStrategyValidated | null = null
+    const aiCtx = (mesocycleData.ai_context_json ?? {}) as Record<string, unknown>
+    const rawStrategy = aiCtx.strategy
+    if (rawStrategy) {
+        const parsed = MesocycleStrategySchema.safeParse(rawStrategy)
+        if (parsed.success) strategy = parsed.data
+    }
+
+    // If strategy is present, derive per-coach weekBriefs for this week from
+    // its domainAllocations (coachingTeam isn't loaded in this function).
+    const weekBriefs = strategy
+        ? strategy.domainAllocations
+            .map(d => ({
+                coach: d.coach,
+                brief: extractWeekBrief(strategy!, d.coach, microcycle.week_number),
+            }))
+            .filter(x => x.brief !== null)
+        : []
+
     // ─── Step 6: Call the AI Programming Engine ──────────────────────────────
     const systemPrompt = buildProgrammingSystemPrompt()
-    const userPrompt = buildProgrammingUserPrompt(programmingContext)
+    const baseUserPrompt = buildProgrammingUserPrompt(programmingContext)
+
+    const weekBriefSection = weekBriefs.length > 0
+        ? `\n\n── HEAD COACH'S BRIEF FOR THIS WEEK ──\n${weekBriefs
+            .map(({ coach, brief }) => {
+                if (!brief) return ''
+                return `### ${coach}
+Sessions this week: ${brief.sessionsToGenerate}
+Load budget per session: ${brief.loadBudget}/10
+Week emphasis: ${brief.weekEmphasis}
+Volume: ${brief.volumePercent}% of MRV
+${brief.isDeload ? '(deload week)' : ''}
+Methodology directive: ${brief.methodologyDirective}
+Constraints: ${brief.constraints.join('; ') || '(none)'}`
+            })
+            .filter(Boolean)
+            .join('\n\n')}\n\nGenerate sessions that respect each coach's brief.`
+        : ''
+    const userPrompt = baseUserPrompt + weekBriefSection
 
     const goalArchetype = profile.goal_archetype ?? mesocycleData.goal ?? 'hybrid_fitness'
     const validatedSchema = createValidatedSessionPoolSchema(goalArchetype)

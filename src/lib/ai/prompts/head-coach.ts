@@ -21,6 +21,7 @@ import {
 } from '../schemas/week-brief'
 import type { AthleteContextPacket, CoachingTeamEntry } from '@/lib/types/coach-context'
 import type { RecoveryAssessmentValidated } from '../schemas/week-brief'
+import { ARCHETYPE_DEFAULTS, type Archetype } from '@/lib/wizard/archetypes'
 
 // ─── Head Coach Identity ────────────────────────────────────────────────────
 
@@ -116,6 +117,84 @@ export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket): str
         ? benchmarks.map(b => `${b.benchmark_name}: ${b.value} ${b.unit}`).join(', ')
         : 'No benchmarks — coaches will use estimation'
 
+    // Carryover sections from sub-project D (only present when wizard wired the data through)
+    const carryoverSections: string[] = []
+
+    // Read wizard input from ai_context_json (set by createBlockShell). Spliced by runHeadCoachStrategy before passing ctx.
+    const aiCtx = ((ctx as unknown) as {
+        aiContextJson?: {
+            archetype?: Archetype
+            customCounts?: Record<string, number> | null
+            carryover?: { daysPerWeek: number; sessionMinutes: number; warmupMinutes: number; cooldownMinutes: number; freeText: string }
+            mode?: 'first-block' | 'post-block'
+        }
+    }).aiContextJson
+
+    // 1. Last block's actuals
+    if (ctx.latestBlockRetrospective) {
+        const r = ctx.latestBlockRetrospective
+        const byDomain = Object.entries(r.adherence.byCoachDomain)
+            .map(([coachDomain, d]) => `  - ${coachDomain}: ${d.completed}/${d.prescribed} (${d.pct}%)`)
+            .join('\n')
+        carryoverSections.push(`── LAST BLOCK'S ACTUALS ──
+Block: ${r.block.name}
+Adherence: ${r.adherence.overall.completed}/${r.adherence.overall.prescribed} (${r.adherence.overall.pct}%)
+By coach domain:
+${byDomain || '  (none)'}
+Recalibrations: ${r.recalibrations.length}
+Interventions: ${r.interventions.length}
+Missed sessions: ${r.missedSessions.length}
+
+Use this to inform domain emphasis and load — what worked, what didn't.`)
+    }
+
+    // 2. Athlete's stated reality (post-block: from pendingPlannerNotes.availability)
+    if (ctx.pendingPlannerNotes?.availability) {
+        const a = ctx.pendingPlannerNotes.availability
+        const effective = a.sessionMinutes - a.warmupMinutes - a.cooldownMinutes
+        const free = ctx.pendingPlannerNotes.freeText
+        carryoverSections.push(`── ATHLETE'S STATED REALITY (from reality-check) ──
+Days/week: ${a.daysPerWeek}
+Session length: ${a.sessionMinutes} min (warmup ${a.warmupMinutes}, cooldown ${a.cooldownMinutes})
+Effective work time per session: ${effective} min
+${free ? `Free text: ${free}` : ''}
+
+Treat these as authoritative. Total weekly load budget is ${a.daysPerWeek * effective} effective minutes. Plan within this budget.`)
+    }
+
+    // 3. Athlete's availability (first-block: from wizard's AvailabilityForm via ai_context_json.carryover)
+    if (aiCtx?.mode === 'first-block' && aiCtx.carryover) {
+        const c = aiCtx.carryover
+        const effective = c.sessionMinutes - c.warmupMinutes - c.cooldownMinutes
+        carryoverSections.push(`── ATHLETE'S AVAILABILITY ──
+Days/week: ${c.daysPerWeek}
+Session length: ${c.sessionMinutes} min (warmup ${c.warmupMinutes}, cooldown ${c.cooldownMinutes})
+Effective work time per session: ${effective} min
+${c.freeText ? `Free text: ${c.freeText}` : ''}
+
+Treat these as authoritative. Total weekly load budget is ${c.daysPerWeek * effective} effective minutes. Plan within this budget.`)
+    }
+
+    // 4. Athlete's requested emphasis (always present when archetype is in ai_context_json)
+    if (aiCtx?.archetype) {
+        const counts = aiCtx.customCounts ?? (aiCtx.archetype !== 'custom' ? ARCHETYPE_DEFAULTS[aiCtx.archetype] : null)
+        if (counts) {
+            const distrib = Object.entries(counts)
+                .map(([coach, n]) => `  - ${coach}: ${n} sessions/week`)
+                .join('\n')
+            carryoverSections.push(`── ATHLETE'S REQUESTED EMPHASIS ──
+Archetype: ${aiCtx.archetype}
+Per-coach session count request:
+${distrib}
+
+Use this as a hint; you may bias up or down by ±1 session per coach if recovery/load math demands it, but prefer the athlete's expressed intent.`)
+        }
+    }
+
+    const carryoverBlock = carryoverSections.length > 0
+        ? `\n\n${carryoverSections.join('\n\n')}\n`
+        : ''
+
     return `DESIGN MESOCYCLE STRATEGY
 
 ── ATHLETE PROFILE ──
@@ -151,7 +230,7 @@ ${injuryStr}
 
 ── KNOWN BENCHMARKS ──
 ${benchmarkStr}
-
+${carryoverBlock}
 Design a mesocycle strategy for this athlete. Allocate sessions and recovery budget based on the coaching team priority ranking. Return ONLY the JSON matching the schema.`
 }
 
