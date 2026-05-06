@@ -1,26 +1,31 @@
 'use client'
 
-import type { Workout } from '@/lib/types/database.types'
+export interface WeekSession {
+  id: string
+  name: string
+  modality: string
+  duration_minutes: number | null
+}
 
 export interface WeekSessionPoolPreviewProps {
   weekNumber: number
   emphasis: string
-  workouts: Workout[]
+  sessions: WeekSession[]
 }
 
-export function WeekSessionPoolPreview({ weekNumber, emphasis, workouts }: WeekSessionPoolPreviewProps) {
+export function WeekSessionPoolPreview({ weekNumber, emphasis, sessions }: WeekSessionPoolPreviewProps) {
   return (
     <section className="border-b border-neutral-800 px-6 py-6">
       <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider mb-3">
         Week {weekNumber} — {emphasis}
       </div>
-      <div className="text-[11px] font-inter text-neutral-400 mb-3">{workouts.length} sessions</div>
+      <div className="text-[11px] font-inter text-neutral-400 mb-3">{sessions.length} sessions</div>
       <div className="space-y-1">
-        {workouts.map(w => (
-          <div key={w.id} className="flex justify-between text-[11px] font-inter py-1.5 border-b border-neutral-900">
-            <span className="text-neutral-200">{w.name}</span>
+        {sessions.map(s => (
+          <div key={s.id} className="flex justify-between text-[11px] font-inter py-1.5 border-b border-neutral-900">
+            <span className="text-neutral-200">{s.name}</span>
             <span className="text-neutral-500 font-mono">
-              {w.actual_duration_minutes ?? '—'} min · {w.modality}
+              {s.duration_minutes ?? '—'} min · {s.modality}
             </span>
           </div>
         ))}
