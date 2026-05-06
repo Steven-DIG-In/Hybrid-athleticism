@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 export interface AvailabilityValue {
   daysPerWeek: number
   sessionMinutes: number
@@ -20,46 +22,38 @@ export function AvailabilityForm({ value, onChange }: AvailabilityFormProps) {
       <div className="grid grid-cols-2 gap-3 text-[12px] font-inter">
         <label className="flex flex-col gap-1">
           <span className="text-neutral-500 text-[10px] font-mono uppercase">Days/week</span>
-          <input
-            type="number"
+          <NumberField
+            value={value.daysPerWeek}
+            onChange={n => onChange({ ...value, daysPerWeek: n })}
             min={1}
             max={7}
-            value={value.daysPerWeek}
-            onChange={e => onChange({ ...value, daysPerWeek: Number(e.target.value) })}
-            className="bg-neutral-900 border border-neutral-800 px-2 py-1.5 text-neutral-200"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-neutral-500 text-[10px] font-mono uppercase">Session min</span>
-          <input
-            type="number"
+          <NumberField
+            value={value.sessionMinutes}
+            onChange={n => onChange({ ...value, sessionMinutes: n })}
             min={20}
             max={180}
-            value={value.sessionMinutes}
-            onChange={e => onChange({ ...value, sessionMinutes: Number(e.target.value) })}
-            className="bg-neutral-900 border border-neutral-800 px-2 py-1.5 text-neutral-200"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-neutral-500 text-[10px] font-mono uppercase">Warm-up min</span>
-          <input
-            type="number"
+          <NumberField
+            value={value.warmupMinutes}
+            onChange={n => onChange({ ...value, warmupMinutes: n })}
             min={0}
             max={60}
-            value={value.warmupMinutes}
-            onChange={e => onChange({ ...value, warmupMinutes: Number(e.target.value) })}
-            className="bg-neutral-900 border border-neutral-800 px-2 py-1.5 text-neutral-200"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-neutral-500 text-[10px] font-mono uppercase">Cool-down min</span>
-          <input
-            type="number"
+          <NumberField
+            value={value.cooldownMinutes}
+            onChange={n => onChange({ ...value, cooldownMinutes: n })}
             min={0}
             max={60}
-            value={value.cooldownMinutes}
-            onChange={e => onChange({ ...value, cooldownMinutes: Number(e.target.value) })}
-            className="bg-neutral-900 border border-neutral-800 px-2 py-1.5 text-neutral-200"
           />
         </label>
       </div>
@@ -73,5 +67,32 @@ export function AvailabilityForm({ value, onChange }: AvailabilityFormProps) {
         />
       </label>
     </section>
+  )
+}
+
+function NumberField({ value, onChange, min, max }: { value: number; onChange: (n: number) => void; min: number; max: number }) {
+  const [text, setText] = useState<string>(String(value))
+  useEffect(() => {
+    const parsed = parseInt(text, 10)
+    if (isNaN(parsed) || parsed !== value) setText(String(value))
+  }, [value])
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={text}
+      onChange={e => {
+        const next = e.target.value
+        setText(next)
+        const n = parseInt(next, 10)
+        if (!isNaN(n)) onChange(n)
+      }}
+      onBlur={() => {
+        const n = parseInt(text, 10)
+        if (isNaN(n)) setText(String(value))
+      }}
+      className="bg-neutral-900 border border-neutral-800 px-2 py-1.5 text-neutral-200"
+    />
   )
 }

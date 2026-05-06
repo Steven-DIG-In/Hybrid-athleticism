@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { submitRealityCheck } from '@/lib/actions/pending-notes.actions'
 import type {
@@ -137,16 +137,34 @@ function NumberInput({ value, onChange, min, max, step = 1 }: {
   value: number; onChange: (v: number) => void
   min: number; max: number; step?: number
 }) {
+  const [text, setText] = useState<string>(String(value))
+
+  // Sync local text when parent value changes externally (e.g., form reset)
+  useEffect(() => {
+    // Only sync when the displayed text would parse to a different number than value
+    const parsed = parseInt(text, 10)
+    if (isNaN(parsed) || parsed !== value) {
+      setText(String(value))
+    }
+  }, [value])
+
   return (
     <input
       type="number"
-      value={value}
+      value={text}
       min={min}
       max={max}
       step={step}
       onChange={e => {
-        const n = parseInt(e.target.value, 10)
+        const next = e.target.value
+        setText(next)
+        const n = parseInt(next, 10)
         if (!isNaN(n)) onChange(n)
+      }}
+      onBlur={() => {
+        // If the field was left empty or invalid, snap back to current value
+        const n = parseInt(text, 10)
+        if (isNaN(n)) setText(String(value))
       }}
       className="w-full px-2.5 py-1.5 bg-[#111] border border-neutral-800 text-white text-[12px] font-mono focus:outline-none focus:border-amber-500/50"
     />
