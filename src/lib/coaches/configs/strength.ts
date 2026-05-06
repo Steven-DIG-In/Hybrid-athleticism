@@ -3,10 +3,10 @@ import type { CoachConfig } from '../types'
 import { StrengthProgramSchema } from '@/lib/ai/schemas/week-brief'
 import type { StrengthProgramValidated } from '@/lib/ai/schemas/week-brief'
 import {
-    buildStrengthProgramSystemPrompt,
-    buildStrengthProgramUserPrompt,
-    buildStrengthModificationSystemPrompt,
-    buildStrengthModificationUserPrompt,
+  buildStrengthProgramSystemPrompt,
+  buildStrengthProgramUserPrompt,
+  buildStrengthModificationSystemPrompt,
+  buildStrengthModificationUserPrompt,
 } from '@/lib/ai/prompts/strength-coach'
 
 export const strengthCoachConfig: CoachConfig = {
@@ -75,20 +75,20 @@ export const strengthCoachConfig: CoachConfig = {
   },
   alwaysActive: false,
   programming: {
-      schema: StrengthProgramSchema,
-      buildSystemPrompt: buildStrengthProgramSystemPrompt,
-      buildUserPrompt: buildStrengthProgramUserPrompt as (...args: unknown[]) => string,
-      buildModSystemPrompt: buildStrengthModificationSystemPrompt,
-      buildModUserPrompt: buildStrengthModificationUserPrompt as (...args: unknown[]) => string,
-      resultKey: 'strengthProgram',
-      modifiedKey: 'modifiedStrengthSessions',
-      maxTokens: 8192,
-      temperature: 0.7,
-      modTemperature: 0.4,
-      logLabel: 'Strength',
-      logSummary: (d: unknown) => {
-          const data = d as StrengthProgramValidated
-          return `${data.splitDesign}, ${data.weeks.length} weeks`
-      },
+    schema: StrengthProgramSchema,
+    buildSystemPrompt: buildStrengthProgramSystemPrompt,
+    buildUserPrompt: buildStrengthProgramUserPrompt as (...args: unknown[]) => string,
+    buildModSystemPrompt: buildStrengthModificationSystemPrompt,
+    buildModUserPrompt: buildStrengthModificationUserPrompt as (...args: unknown[]) => string,
+    resultKey: 'strengthProgram',
+    modifiedKey: 'modifiedStrengthSessions',
+    maxTokens: 8192,
+    temperature: 0.7,
+    modTemperature: 0.4,
+    logLabel: 'Strength',
+    logSummary: (d: unknown) => {
+      const data = d as StrengthProgramValidated
+      return `${data.splitDesign}, ${data.weeks.length} weeks`
+    },
   },
 }
