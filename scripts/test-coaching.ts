@@ -62,7 +62,7 @@ import {
     MobilityProgramSchema,
 } from '../src/lib/ai/schemas/week-brief'
 
-import { extractWeekBrief } from '../src/lib/ai/orchestrator'
+import { extractWeekBrief } from '../src/lib/engine/mesocycle/strategy'
 
 import type { AthleteContextPacket } from '../src/lib/types/coach-context'
 import type { Profile, AthleteInjury, AthleteBenchmark, RecentTrainingActivity } from '../src/lib/types/database.types'

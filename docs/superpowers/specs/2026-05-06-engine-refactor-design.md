@@ -238,6 +238,18 @@ No single-user-isms found in pure helpers; functions take pre-resolved arguments
 - `src/lib/engine/_shared/domain-prompt-args.ts:51` — `for (let i = 0; ...)` — function-local loop variable. No fix needed.
 - `src/lib/engine/_shared/methodology-context.ts` — calls `resolveTrainingMaxForExercise`, which itself reads via the authenticated supabase client; no direct DB access from this file. Profile + benchmarks arrive as caller-resolved arguments. No fix needed at this layer.
 
+### Task 11 — engine/mesocycle/
+
+No single-user-isms requiring fixes. The relocated action operates on a caller-supplied `mesocycleId` (primary key) and always pairs `.eq('id', mesocycleId)` with `.eq('user_id', user.id)`; the context loader does the same on `profiles`, `mesocycles`, `microcycles`, `athlete_injuries`, `athlete_benchmarks`, `recent_training_activity`, `workouts`, `exercise_sets`. No `LIMIT 1` on `mesocycles` without an `is_active=true` predicate is present because the lookup is by primary key, not "the active mesocycle".
+
+- `src/lib/engine/mesocycle/generate.ts:62` — `auth.getUser()` present at action entry. No fix needed.
+- `src/lib/engine/mesocycle/generate.ts:238-263` — `UPDATE mesocycles ... .eq('id', mesocycleId).eq('user_id', user.id)`. No fix needed.
+- `src/lib/engine/mesocycle/context.ts:97` — `SELECT mesocycles ... .eq('id', mesocycleId).eq('user_id', userId)`. No fix needed.
+- `src/lib/engine/mesocycle/context.ts:112-114` — injuries / benchmarks / recent_training all filtered by user_id (and `is_active=true` on injuries). No fix needed.
+- `src/lib/engine/mesocycle/context.ts:129,172` — microcycles lookup by composite `(mesocycle_id, week_number, user_id)` then `.single()`; the row is unique by construction. No `is_active` flag exists on microcycles. No fix needed.
+- `src/lib/engine/mesocycle/context.ts:267` — `let loadSummary` is function-local, not module-scope cache. No fix needed.
+- `src/lib/engine/mesocycle/strategy.ts` — pure helper, no I/O. No findings.
+
 ## Verification
 
 ### Safety-net snapshot
