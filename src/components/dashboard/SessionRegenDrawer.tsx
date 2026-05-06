@@ -9,7 +9,7 @@ import {
     Bike, Waves, Anchor,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { regenerateSingleSession } from '@/lib/actions/programming.actions'
+import { regenerateSingleSession } from '@/lib/engine/session/regenerate'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 

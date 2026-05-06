@@ -266,6 +266,23 @@ One single-user-ism fixed during the move; the rest of the relocated body was al
 - `src/lib/engine/microcycle/generate-pool.ts:126,229,278,309,400` — `let` declarations are function-local conditionals or loop counters. No fix needed.
 - `src/lib/engine/mesocycle/context.ts:295` (`deduplicateBenchmarks`) — flipped from private to `export function` so the relocated `generate-pool.ts` and the still-resident `regenerateSingleSession` (Task 13) can share the implementation rather than duplicate it. Behavior-preserving because both prior copies relied on a benchmarks list pre-sorted by `created_at DESC`, under which "first-seen-wins" (the kept copy) and "max-created_at-wins" (the deleted copy) produce identical output.
 
+### Task 13 — engine/session/ + engine/scheduling/
+
+One single-user-ism fixed during the move; the rest of the relocated bodies were already user-scoped end-to-end.
+
+- `src/lib/engine/session/regenerate.ts:75-95` (`regenerateSingleSession`, add-mode current/upcoming microcycle lookup) — same pattern Task 12 fixed in `generate-pool.ts`. The `.from('microcycles')` date-range and fall-back queries scoped only by `user_id`, with no constraint on which mesocycle the microcycle belonged to. Under multiple historical mesocycles per user, an archived mesocycle could overlap "today" and shadow the active one. Fix applied: added `mesocycles!inner(is_active)` join + `.eq('mesocycles.is_active', true)` to both the date-range and fall-back-to-upcoming queries. Behavior-preserving for single user because Steven only ever has one active mesocycle at a time, so the join filters to the same row that would have matched without it.
+- `src/lib/engine/session/regenerate.ts:54-58` (replace-mode workout lookup) — pairs `.eq('id', workoutId).eq('user_id', user.id)`. No fix needed.
+- `src/lib/engine/session/regenerate.ts:108-112` (existingWorkoutsForLoad) — workouts query scoped by `microcycle_id` AND `user_id`. No fix needed.
+- `src/lib/engine/session/regenerate.ts:142-146` (microcycle full-context load) — pairs `.eq('id', microcycleId).eq('user_id', user.id)` and joins `mesocycles!inner`. No fix needed.
+- `src/lib/engine/session/regenerate.ts:156-162` (parallel context loads — profile / injuries / benchmarks / recent_training / existing workouts) — all filter by `user_id`; injuries also `is_active=true`. No fix needed.
+- `src/lib/engine/session/regenerate.ts:217-232` (previous-week microcycle + workouts) — composite `(mesocycle_id, week_number, user_id)` lookup is unique; workouts scoped by `microcycle_id` AND `user_id`. No fix needed.
+- `src/lib/engine/session/regenerate.ts:351-355` (delete on regenerate) — workouts delete pairs `.eq('id', workoutId).eq('user_id', user.id)`; exercise_sets/cardio_logs deletes filter by `workout_id` (the parent row was already user-scoped on lookup). No fix needed.
+- `src/lib/engine/session/regenerate.ts:359-372` (workout insert) — includes `user_id: user.id` in the inserted row. No fix needed.
+- `src/lib/engine/scheduling/allocate.ts:23-101` and `src/lib/engine/scheduling/deallocate.ts:23-100` — both functions resolve the active mesocycle via `.eq('user_id', user.id).eq('is_active', true)` on `mesocycles`, then constrain microcycle queries by `mesocycle_id` AND `user_id`. The `targetMicrocycleId` branch pairs `.eq('id', targetMicrocycleId).eq('user_id', user.id)`. No fix needed.
+- `src/lib/engine/scheduling/allocate.ts:109-113,148-156` (workouts read + per-row update) — both scoped by `user_id` (and `microcycle_id`/`id`). No fix needed.
+- `src/lib/engine/scheduling/deallocate.ts:247-255` (bulk update) — scoped by `microcycle_id` AND `user_id` AND `is_completed=false`. No fix needed.
+- `let microcycle / microcycleId / scheduledDate / previousWeekSessions / benchmarkDates` across all three files — all narrow control-flow locals, NOT module-scope state. No fix needed.
+
 ## Verification
 
 ### Safety-net snapshot
