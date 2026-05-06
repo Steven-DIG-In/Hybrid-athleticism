@@ -230,7 +230,13 @@ Each finding logged as: `file:line — pattern — fix-applied | DEFER: <one-lin
 
 ## Audit findings
 
-*(Populated during execution. Empty in spec form. Each commit that touches an engine file appends its findings here in the same commit.)*
+### Task 10 — engine/_shared/
+
+No single-user-isms found in pure helpers; functions take pre-resolved arguments and don't query Supabase directly.
+
+- `src/lib/engine/_shared/skill-execution.ts:46,48` — `let dayOffset = 0` / `for (let i = 0; ...)` — function-local loop variables, NOT module-scope caches. No fix needed.
+- `src/lib/engine/_shared/domain-prompt-args.ts:51` — `for (let i = 0; ...)` — function-local loop variable. No fix needed.
+- `src/lib/engine/_shared/methodology-context.ts` — calls `resolveTrainingMaxForExercise`, which itself reads via the authenticated supabase client; no direct DB access from this file. Profile + benchmarks arrive as caller-resolved arguments. No fix needed at this layer.
 
 ## Verification
 
