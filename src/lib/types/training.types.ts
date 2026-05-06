@@ -143,6 +143,18 @@ export interface DashboardData {
      * `src/components/dashboard/WeekViewClient.tsx`.
      */
     weekViewSessions: WeekViewSession[]
+    /**
+     * Number of session_inventory rows for the active mesocycle in 'completed'
+     * status. Drives whether the quiet "Close block" CTA is rendered in the
+     * dashboard header (avoid offering "close" on a brand-new block).
+     */
+    completedSessionCount: number
+    /**
+     * True when no session_inventory rows for the active mesocycle remain in
+     * 'pending' or 'active' status. Combined with end_date-passed to drive the
+     * nudge banner.
+     */
+    allSessionsResolved: boolean
 }
 
 // ─── WeekView session (calendar view on the dashboard) ──────────────────────
