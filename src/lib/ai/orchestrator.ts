@@ -101,52 +101,21 @@ import { recoveryScorerSkill } from '@/lib/skills/domains/recovery/recovery-scor
 // TM resolver — prefers stored training_maxes, falls back to benchmark-derived
 import { resolveTrainingMaxForExercise } from '@/lib/training/methodology-helpers'
 
-import type { ZodType } from 'zod'
+import type {
+    MesocycleGenerationResult,
+    WeeklyAdjustmentResult,
+    ProgrammingMeta,
+} from '@/lib/engine/types'
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-export interface MesocycleGenerationResult {
-    strategy: MesocycleStrategyValidated
-    strengthProgram?: StrengthProgramValidated
-    enduranceProgram?: EnduranceProgramValidated
-    hypertrophyProgram?: HypertrophyProgramValidated
-    conditioningProgram?: ConditioningProgramValidated
-    mobilityProgram?: MobilityProgramValidated
-}
-
-export interface WeeklyAdjustmentResult {
-    recovery: RecoveryAssessmentValidated
-    directive?: AdjustmentDirectiveValidated
-    modifiedStrengthSessions?: StrengthProgramValidated
-    modifiedEnduranceSessions?: EnduranceProgramValidated
-    modifiedHypertrophySessions?: HypertrophyProgramValidated
-    modifiedConditioningSessions?: ConditioningProgramValidated
-    modifiedMobilitySessions?: MobilityProgramValidated
-    // If GREEN, directive and modified sessions are undefined — serve pre-programmed sessions
-}
+export type { MesocycleGenerationResult, WeeklyAdjustmentResult } from '@/lib/engine/types'
 
 // ─── Domain Coach Registry — maps coach domain to schema + prompt builders ──
-
-interface DomainCoachMeta {
-    schema: ZodType
-    buildSystemPrompt: () => string
-    buildUserPrompt: (...args: unknown[]) => string
-    buildModSystemPrompt: () => string
-    buildModUserPrompt: (...args: unknown[]) => string
-    resultKey: keyof MesocycleGenerationResult
-    modifiedKey: keyof WeeklyAdjustmentResult
-    maxTokens: number
-    temperature: number
-    modTemperature: number
-    logLabel: string
-    logSummary: (data: unknown) => string
-}
 
 /**
  * Build the mapping from domain to schema/prompt/result-key.
  * This avoids repetitive switch statements and enables the generic loop.
  */
-function getDomainMeta(): Record<string, DomainCoachMeta> {
+export function getDomainMeta(): Record<string, ProgrammingMeta> {
     return {
         strength: {
             schema: StrengthProgramSchema,
@@ -1011,7 +980,7 @@ async function runAdjustmentPipeline(
     ctx: AthleteContextPacket,
     recovery: RecoveryAssessmentValidated,
     nextWeekSessions: Array<{ coach: string; sessionName: string; exercises?: string[] }> | undefined,
-    domainMeta: Record<string, DomainCoachMeta>
+    domainMeta: Record<string, ProgrammingMeta>
 ): Promise<ActionResult<WeeklyAdjustmentResult>> {
 
     // ── Step 3: Head Coach — Adjustment Directive ──────────────────────────
