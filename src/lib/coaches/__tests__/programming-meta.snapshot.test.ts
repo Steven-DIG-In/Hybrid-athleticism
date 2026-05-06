@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { getDomainMeta } from '@/lib/ai/orchestrator'
+import { coachRegistry } from '@/lib/coaches'
 
 describe('coach programming metadata', () => {
     it('matches captured shape', () => {
-        const meta = getDomainMeta()
-        expect(serializeProgrammingMeta(meta)).toMatchSnapshot()
+        const domains = ['strength', 'endurance', 'hypertrophy', 'conditioning', 'mobility'] as const
+        const meta = Object.fromEntries(
+            domains.map(d => [d, coachRegistry.getCoach(d)?.programming])
+        )
+        expect(serializeProgrammingMeta(meta as Record<string, unknown>)).toMatchSnapshot()
     })
 })
 

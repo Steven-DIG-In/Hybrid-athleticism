@@ -104,29 +104,9 @@ import { resolveTrainingMaxForExercise } from '@/lib/training/methodology-helper
 import type {
     MesocycleGenerationResult,
     WeeklyAdjustmentResult,
-    ProgrammingMeta,
 } from '@/lib/engine/types'
 
 export type { MesocycleGenerationResult, WeeklyAdjustmentResult } from '@/lib/engine/types'
-
-// ─── Domain Coach Registry — maps coach domain to schema + prompt builders ──
-
-/**
- * Build the mapping from domain to schema/prompt/result-key.
- * This avoids repetitive switch statements and enables the generic loop.
- */
-export function getDomainMeta(): Record<string, ProgrammingMeta> {
-    const domains = ['strength', 'endurance', 'hypertrophy', 'conditioning', 'mobility'] as const
-    const result: Record<string, ProgrammingMeta> = {}
-    for (const domain of domains) {
-        const meta = coachRegistry.getCoach(domain)?.programming
-        if (!meta) {
-            throw new Error(`Coach config '${domain}' is missing programming metadata. Populate ProgrammingMeta in src/lib/coaches/configs/${domain}.ts.`)
-        }
-        result[domain] = meta
-    }
-    return result
-}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -593,8 +573,6 @@ export async function generateMesocycleProgram(
 ): Promise<ActionResult<MesocycleGenerationResult>> {
     console.log('[orchestrator] Pipeline A: Starting mesocycle generation')
 
-    const domainMeta = getDomainMeta()
-
     // ── Step 1: Head Coach — Mesocycle Strategy ────────────────────────────
     // This step stays AS-IS — it is AI-only, no skills involved.
     console.log('[orchestrator] Step 1: Head Coach → MesocycleStrategy')
@@ -633,13 +611,13 @@ export async function generateMesocycleProgram(
     }
     // Add always-active domain coaches (mobility is always active and generates programs)
     for (const coach of coachRegistry.getAlwaysActiveCoaches()) {
-        if (coach.id !== 'recovery' && domainMeta[coach.id]) {
+        if (coach.id !== 'recovery' && coachRegistry.getCoach(coach.id)?.programming) {
             coachDomains.add(coach.id)
         }
     }
 
     for (const domain of coachDomains) {
-        const meta = domainMeta[domain]
+        const meta = coachRegistry.getCoach(domain as CoachDomain)?.programming
         if (!meta) continue
 
         const config = coachRegistry.getCoach(domain as CoachDomain)
@@ -761,8 +739,6 @@ export async function runWeeklyAdjustment(
 ): Promise<ActionResult<WeeklyAdjustmentResult>> {
     console.log(`[orchestrator] Pipeline B: Weekly adjustment for week ${ctx.weekNumber}`)
 
-    const domainMeta = getDomainMeta()
-
     // ── Step 1: Recovery Scorer Skill — Deterministic Assessment ─────────
     // Replaces the AI-driven Recovery Coach call with the recovery-scorer skill.
     console.log('[orchestrator] Step 1: Recovery Scorer Skill → deterministic assessment')
@@ -854,7 +830,7 @@ export async function runWeeklyAdjustment(
         }
 
         // Continue to Step 3 with AI-assessed recovery
-        return await runAdjustmentPipeline(ctx, recovery, nextWeekSessions, domainMeta)
+        return await runAdjustmentPipeline(ctx, recovery, nextWeekSessions)
     }
 
     console.log(`[orchestrator] Recovery score: ${recoveryScore.score} → ${recoveryScore.status}`)
@@ -892,7 +868,7 @@ export async function runWeeklyAdjustment(
 
     console.log(`[orchestrator] ${recovery.status} — proceeding to adjustment pipeline`)
 
-    return await runAdjustmentPipeline(ctx, recovery, nextWeekSessions, domainMeta)
+    return await runAdjustmentPipeline(ctx, recovery, nextWeekSessions)
 }
 
 /**
@@ -903,7 +879,6 @@ async function runAdjustmentPipeline(
     ctx: AthleteContextPacket,
     recovery: RecoveryAssessmentValidated,
     nextWeekSessions: Array<{ coach: string; sessionName: string; exercises?: string[] }> | undefined,
-    domainMeta: Record<string, ProgrammingMeta>
 ): Promise<ActionResult<WeeklyAdjustmentResult>> {
 
     // ── Step 3: Head Coach — Adjustment Directive ──────────────────────────
@@ -952,7 +927,7 @@ async function runAdjustmentPipeline(
         if (coachDirective.action === 'no_change') continue
 
         const domain = coachDirective.coach
-        const meta = domainMeta[domain]
+        const meta = coachRegistry.getCoach(domain as CoachDomain)?.programming
         if (!meta) {
             console.warn(`[orchestrator] No meta for domain ${domain} — skipping modification`)
             continue
