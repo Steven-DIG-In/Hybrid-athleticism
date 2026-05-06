@@ -22,7 +22,6 @@ import type {
     BodyCompGoal,
     EquipmentUsageIntent,
 } from '@/lib/types/database.types'
-import { generateMesocycleInventory } from './inventory-generation.actions'
 
 // ─── Input types ─────────────────────────────────────────────────────────────
 
@@ -338,7 +337,7 @@ export async function saveRecentTraining(
 
 export async function completeOnboarding(
     benchmarkPath: string = 'ai_estimated'
-): Promise<ActionResult<{ mesocycleId: string }>> {
+): Promise<ActionResult<{ ok: true }>> {
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -346,19 +345,17 @@ export async function completeOnboarding(
         return { success: false, error: 'Not authenticated' }
     }
 
-    // Fetch profile for mesocycle creation context
     const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('goal_archetype, available_days, equipment_list, primary_goal')
+        .select('goal_archetype, primary_goal')
         .eq('id', user.id)
         .maybeSingle()
 
     if (profileError || !profile) {
         console.error('[completeOnboarding] profile fetch', profileError)
-        return { success: false, error: 'Could not fetch profile. Please restart onboarding.' }
+        return { success: false, error: 'Could not fetch profile.' }
     }
 
-    // Map goal_archetype to mesocycle_goal for backward compat
     const goalMap: Record<string, string> = {
         hybrid_fitness: 'HYBRID_PEAKING',
         strength_focus: 'STRENGTH',
@@ -368,13 +365,12 @@ export async function completeOnboarding(
     }
     const mesocycleGoal = goalMap[profile.goal_archetype ?? ''] ?? profile.primary_goal ?? 'HYBRID_PEAKING'
 
-    // Step 1: Set onboarding_completed_at + benchmark_discovery_status + legacy flag
     const { error: updateError } = await supabase
         .from('profiles')
         .update({
             onboarding_completed_at: new Date().toISOString(),
             benchmark_discovery_status: benchmarkPath === 'discovery' ? 'pending' : 'complete',
-            benchmark_week_complete: true, // Legacy compat
+            benchmark_week_complete: true,
             primary_goal: mesocycleGoal,
         })
         .eq('id', user.id)
@@ -384,88 +380,9 @@ export async function completeOnboarding(
         return { success: false, error: updateError.message }
     }
 
-    // Step 2: Create first mesocycle
-    const today = new Date()
-    const startDate = getNextMonday(today)
-    const weekCount = 6
-
-    const { data: mesocycle, error: mesoError } = await supabase
-        .from('mesocycles')
-        .insert({
-            user_id: user.id,
-            name: `${mesocycleGoal} Block 1`,
-            goal: mesocycleGoal,
-            week_count: weekCount,
-            start_date: startDate.toISOString().split('T')[0],
-            is_active: true,
-            is_complete: false,
-            ai_context_json: {
-                generatedBy: 'onboarding_v2',
-                equipmentList: profile.equipment_list,
-                availableDays: profile.available_days,
-                goalArchetype: profile.goal_archetype,
-            },
-        })
-        .select()
-        .single()
-
-    if (mesoError || !mesocycle) {
-        console.error('[completeOnboarding] mesocycle insert', mesoError)
-        return { success: false, error: `Mesocycle creation failed: ${mesoError?.message}` }
-    }
-
-    // Step 3: Scaffold microcycles
-    const microcycles = []
-    for (let week = 1; week <= weekCount; week++) {
-        const weekStart = new Date(startDate)
-        weekStart.setDate(weekStart.getDate() + (week - 1) * 7)
-        const weekEnd = new Date(weekStart)
-        weekEnd.setDate(weekEnd.getDate() + 6)
-
-        const isDeload = week === weekCount
-        const targetRir = isDeload ? 4 : Math.max(0, 3 - (week - 1) * 0.5)
-
-        microcycles.push({
-            mesocycle_id: mesocycle.id,
-            user_id: user.id,
-            week_number: week,
-            start_date: weekStart.toISOString().split('T')[0],
-            end_date: weekEnd.toISOString().split('T')[0],
-            target_rir: targetRir,
-            is_deload: isDeload,
-        })
-    }
-
-    const { error: microcycleError } = await supabase
-        .from('microcycles')
-        .insert(microcycles)
-
-    if (microcycleError) {
-        console.error('[completeOnboarding] microcycle insert', microcycleError)
-        return { success: false, error: `Microcycle creation failed: ${microcycleError.message}` }
-    }
-
-    // Step 4: Generate unscheduled session inventory for entire mesocycle
-    // This calls the Programming Engine (multi-agent coaches) to generate sessions
-    // and stores them as unscheduled inventory. User allocates to calendar when ready.
-    // We fire-and-forget here — if it fails, the user can regenerate from the dashboard.
-    // The mesocycle shell + microcycles already exist, so the user lands on a valid dashboard.
-    try {
-        const inventoryResult = await generateMesocycleInventory(mesocycle.id, weekCount)
-        if (!inventoryResult.success) {
-            console.warn('[completeOnboarding] Inventory generation failed (non-blocking):', inventoryResult.error)
-            // Don't fail onboarding — the user can regenerate from dashboard
-        } else {
-            console.log(`[completeOnboarding] Generated ${inventoryResult.data.sessions} sessions across ${inventoryResult.data.weeks} weeks`)
-        }
-    } catch (err) {
-        console.warn('[completeOnboarding] Inventory generation error (non-blocking):', err)
-    }
-
-    revalidatePath('/dashboard')
     revalidatePath('/onboarding')
-
-    return { success: true, data: { mesocycleId: mesocycle.id } }
+    revalidatePath('/dashboard')
+    return { success: true, data: { ok: true } }
 }
 
 // ─── Legacy compat: getProfile (used by other features) ─────────────────────
@@ -510,15 +427,4 @@ export async function updateProfile(
 
     revalidatePath('/onboarding')
     return { success: true, data: profile }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getNextMonday(from: Date): Date {
-    const d = new Date(from)
-    const day = d.getDay()
-    const daysUntilMonday = day === 0 ? 1 : day === 1 ? 0 : 8 - day
-    d.setDate(d.getDate() + daysUntilMonday)
-    d.setHours(0, 0, 0, 0)
-    return d
 }
