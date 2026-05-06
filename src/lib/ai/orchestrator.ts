@@ -116,93 +116,16 @@ export type { MesocycleGenerationResult, WeeklyAdjustmentResult } from '@/lib/en
  * This avoids repetitive switch statements and enables the generic loop.
  */
 export function getDomainMeta(): Record<string, ProgrammingMeta> {
-    return {
-        strength: {
-            schema: StrengthProgramSchema,
-            buildSystemPrompt: buildStrengthProgramSystemPrompt,
-            buildUserPrompt: buildStrengthProgramUserPrompt as (...args: unknown[]) => string,
-            buildModSystemPrompt: buildStrengthModificationSystemPrompt,
-            buildModUserPrompt: buildStrengthModificationUserPrompt as (...args: unknown[]) => string,
-            resultKey: 'strengthProgram',
-            modifiedKey: 'modifiedStrengthSessions',
-            maxTokens: 8192,
-            temperature: 0.7,
-            modTemperature: 0.4,
-            logLabel: 'Strength',
-            logSummary: (d: unknown) => {
-                const data = d as StrengthProgramValidated
-                return `${data.splitDesign}, ${data.weeks.length} weeks`
-            },
-        },
-        endurance: {
-            schema: EnduranceProgramSchema,
-            buildSystemPrompt: buildEnduranceProgramSystemPrompt,
-            buildUserPrompt: buildEnduranceProgramUserPrompt as (...args: unknown[]) => string,
-            buildModSystemPrompt: buildEnduranceModificationSystemPrompt,
-            buildModUserPrompt: buildEnduranceModificationUserPrompt as (...args: unknown[]) => string,
-            resultKey: 'enduranceProgram',
-            modifiedKey: 'modifiedEnduranceSessions',
-            maxTokens: 8192,
-            temperature: 0.7,
-            modTemperature: 0.4,
-            logLabel: 'Endurance',
-            logSummary: (d: unknown) => {
-                const data = d as EnduranceProgramValidated
-                return `${data.modalitySummary}, ${data.weeks.length} weeks`
-            },
-        },
-        hypertrophy: {
-            schema: HypertrophyProgramSchema,
-            buildSystemPrompt: buildHypertrophyProgramSystemPrompt,
-            buildUserPrompt: buildHypertrophyProgramUserPrompt as (...args: unknown[]) => string,
-            buildModSystemPrompt: buildHypertrophyModificationSystemPrompt,
-            buildModUserPrompt: buildHypertrophyModificationUserPrompt as (...args: unknown[]) => string,
-            resultKey: 'hypertrophyProgram',
-            modifiedKey: 'modifiedHypertrophySessions',
-            maxTokens: 8192,
-            temperature: 0.7,
-            modTemperature: 0.4,
-            logLabel: 'Hypertrophy',
-            logSummary: (d: unknown) => {
-                const data = d as HypertrophyProgramValidated
-                return `${data.splitDesign}, ${data.weeks.length} weeks`
-            },
-        },
-        conditioning: {
-            schema: ConditioningProgramSchema,
-            buildSystemPrompt: buildConditioningProgramSystemPrompt,
-            buildUserPrompt: buildConditioningProgramUserPrompt as (...args: unknown[]) => string,
-            buildModSystemPrompt: buildConditioningModificationSystemPrompt,
-            buildModUserPrompt: buildConditioningModificationUserPrompt as (...args: unknown[]) => string,
-            resultKey: 'conditioningProgram',
-            modifiedKey: 'modifiedConditioningSessions',
-            maxTokens: 8192,
-            temperature: 0.8,
-            modTemperature: 0.4,
-            logLabel: 'Conditioning',
-            logSummary: (d: unknown) => {
-                const data = d as ConditioningProgramValidated
-                return `${data.methodologyUsed}, ${data.weeks.length} weeks`
-            },
-        },
-        mobility: {
-            schema: MobilityProgramSchema,
-            buildSystemPrompt: buildMobilityProgramSystemPrompt,
-            buildUserPrompt: buildMobilityProgramUserPrompt as (...args: unknown[]) => string,
-            buildModSystemPrompt: buildMobilityModificationSystemPrompt,
-            buildModUserPrompt: buildMobilityModificationUserPrompt as (...args: unknown[]) => string,
-            resultKey: 'mobilityProgram',
-            modifiedKey: 'modifiedMobilitySessions',
-            maxTokens: 8192,
-            temperature: 0.6,
-            modTemperature: 0.4,
-            logLabel: 'Mobility',
-            logSummary: (d: unknown) => {
-                const data = d as MobilityProgramValidated
-                return `${data.methodologyUsed}, ${data.weeks.length} weeks`
-            },
-        },
+    const domains = ['strength', 'endurance', 'hypertrophy', 'conditioning', 'mobility'] as const
+    const result: Record<string, ProgrammingMeta> = {}
+    for (const domain of domains) {
+        const meta = coachRegistry.getCoach(domain)?.programming
+        if (!meta) {
+            throw new Error(`Coach config '${domain}' is missing programming metadata. Populate ProgrammingMeta in src/lib/coaches/configs/${domain}.ts.`)
+        }
+        result[domain] = meta
     }
+    return result
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
