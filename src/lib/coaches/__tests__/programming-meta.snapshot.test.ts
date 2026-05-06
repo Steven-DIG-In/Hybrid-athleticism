@@ -13,7 +13,10 @@ function serializeProgrammingMeta(meta: Record<string, unknown>) {
         Object.entries(meta).map(([domain, m]) => {
             const entry = m as Record<string, unknown>
             return [domain, {
-                schemaName: (entry.schema as { _def?: { typeName?: string } })._def?.typeName,
+                schemaName: (entry.schema as { constructor: { name: string } }).constructor.name,
+                schemaShape: Object.keys(
+                    (entry.schema as { _def?: { shape?: Record<string, unknown> } })._def?.shape ?? {}
+                ).sort(),
                 buildSystemPromptName: (entry.buildSystemPrompt as { name: string }).name,
                 buildUserPromptName: (entry.buildUserPrompt as { name: string }).name,
                 buildModSystemPromptName: (entry.buildModSystemPrompt as { name: string }).name,

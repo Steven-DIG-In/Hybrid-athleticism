@@ -12,7 +12,12 @@ exports[`coach programming metadata > matches captured shape 1`] = `
     "modTemperature": 0.4,
     "modifiedKey": "modifiedConditioningSessions",
     "resultKey": "conditioningProgram",
-    "schemaName": undefined,
+    "schemaName": "ZodObject",
+    "schemaShape": [
+      "methodologyUsed",
+      "programRationale",
+      "weeks",
+    ],
     "temperature": 0.8,
   },
   "endurance": {
@@ -25,7 +30,13 @@ exports[`coach programming metadata > matches captured shape 1`] = `
     "modTemperature": 0.4,
     "modifiedKey": "modifiedEnduranceSessions",
     "resultKey": "enduranceProgram",
-    "schemaName": undefined,
+    "schemaName": "ZodObject",
+    "schemaShape": [
+      "methodologyUsed",
+      "modalitySummary",
+      "programRationale",
+      "weeks",
+    ],
     "temperature": 0.7,
   },
   "hypertrophy": {
@@ -38,7 +49,13 @@ exports[`coach programming metadata > matches captured shape 1`] = `
     "modTemperature": 0.4,
     "modifiedKey": "modifiedHypertrophySessions",
     "resultKey": "hypertrophyProgram",
-    "schemaName": undefined,
+    "schemaName": "ZodObject",
+    "schemaShape": [
+      "methodologyUsed",
+      "programRationale",
+      "splitDesign",
+      "weeks",
+    ],
     "temperature": 0.7,
   },
   "mobility": {
@@ -51,7 +68,12 @@ exports[`coach programming metadata > matches captured shape 1`] = `
     "modTemperature": 0.4,
     "modifiedKey": "modifiedMobilitySessions",
     "resultKey": "mobilityProgram",
-    "schemaName": undefined,
+    "schemaName": "ZodObject",
+    "schemaShape": [
+      "methodologyUsed",
+      "programRationale",
+      "weeks",
+    ],
     "temperature": 0.6,
   },
   "strength": {
@@ -64,7 +86,13 @@ exports[`coach programming metadata > matches captured shape 1`] = `
     "modTemperature": 0.4,
     "modifiedKey": "modifiedStrengthSessions",
     "resultKey": "strengthProgram",
-    "schemaName": undefined,
+    "schemaName": "ZodObject",
+    "schemaShape": [
+      "methodologyUsed",
+      "programRationale",
+      "splitDesign",
+      "weeks",
+    ],
     "temperature": 0.7,
   },
 }
