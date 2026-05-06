@@ -12,6 +12,8 @@
 
 import type { Profile, AthleteInjury, AthleteBenchmark, RecentTrainingActivity } from './database.types'
 import type { MuscleGroupVolume } from './training.types'
+import type { BlockRetrospectiveSnapshot } from '@/lib/types/block-retrospective.types'
+import type { PendingPlannerNotes } from '@/lib/types/pending-planner-notes.types'
 
 // ─── Coaching Team ──────────────────────────────────────────────────────────
 
@@ -56,6 +58,10 @@ export interface AthleteContextPacket {
     // Previous week data (for weekly adjustments)
     previousWeekSessions?: PreviousWeekSummary[]
     previousWeekLoadSummary?: WeeklyLoadSummary
+
+    // Carryover from prior block (Block N+1 wizard)
+    latestBlockRetrospective?: BlockRetrospectiveSnapshot | null
+    pendingPlannerNotes?: PendingPlannerNotes | null
 }
 
 export interface PreviousWeekSummary {

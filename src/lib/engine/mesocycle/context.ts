@@ -21,6 +21,8 @@ import type {
     PreviousWeekSummary,
     WeeklyLoadSummary,
 } from '@/lib/types/coach-context'
+import type { BlockRetrospectiveSnapshot } from '@/lib/types/block-retrospective.types'
+import type { PendingPlannerNotes } from '@/lib/types/pending-planner-notes.types'
 import type { MethodologyContext } from '@/lib/ai/prompts/programming'
 import type { EnduranceMethodologyContext } from '@/lib/ai/prompts/endurance-coach'
 import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
@@ -133,6 +135,27 @@ export async function buildAthleteContext(
         .eq('user_id', userId)
         .single()
 
+    // Load retrospective + pending notes in parallel (carryover for head coach)
+    const [retroResult, profileNotesResult] = await Promise.all([
+        supabase
+            .from('block_retrospectives')
+            .select('snapshot_json')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        supabase
+            .from('profiles')
+            .select('pending_planner_notes')
+            .eq('id', userId)
+            .single(),
+    ])
+
+    const latestBlockRetrospective =
+        (retroResult.data?.snapshot_json as BlockRetrospectiveSnapshot) ?? null
+    const pendingPlannerNotes =
+        (profileNotesResult.data?.pending_planner_notes as PendingPlannerNotes) ?? null
+
     const ctx: AthleteContextPacket = {
         profile,
         coachingTeam,
@@ -145,6 +168,8 @@ export async function buildAthleteContext(
         totalWeeks: mesocycle.week_count,
         isDeload: microcycle?.is_deload ?? false,
         targetRir: microcycle?.target_rir ?? null,
+        latestBlockRetrospective,
+        pendingPlannerNotes,
     }
 
     // Load previous week data if requested
