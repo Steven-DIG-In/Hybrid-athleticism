@@ -44,12 +44,15 @@ export async function approveBlockPlan(
     // a prior abandoned approval is overwritten cleanly.
     const { error: pointerErr } = await supabase
         .from('block_pointer')
-        .upsert({
-            user_id: user.id,
-            mesocycle_id: mesocycleId,
-            week_number: 1,
-            next_training_day: 1,
-        })
+        .upsert(
+            {
+                user_id: user.id,
+                mesocycle_id: mesocycleId,
+                week_number: 1,
+                next_training_day: 1,
+            },
+            { onConflict: 'user_id,mesocycle_id,week_number' },
+        )
     if (pointerErr) {
         return { success: false, error: `Block pointer failed: ${pointerErr.message}` }
     }
