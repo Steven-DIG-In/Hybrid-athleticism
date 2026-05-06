@@ -9,7 +9,7 @@ import type { CoachDomain } from '@/lib/skills/types'
 import { type Archetype, ARCHETYPE_LABELS } from '@/lib/wizard/archetypes'
 import { createBlockShell } from '@/lib/engine/mesocycle/create-shell'
 import { runHeadCoachStrategy } from '@/lib/engine/mesocycle/strategy-generation'
-import { generateSessionPool } from '@/lib/engine/microcycle/generate-pool'
+import { generateMesocycleInventory } from '@/lib/actions/inventory-generation.actions'
 import { regenerateBlockPlan } from '@/lib/engine/mesocycle/regenerate'
 import { approveBlockPlan } from '@/lib/engine/mesocycle/approve'
 import { loadWeek1Preview, type Week1PreviewSession } from '@/lib/engine/mesocycle/load-week1-preview'
@@ -116,40 +116,19 @@ export function BlockCreationWizard({ retrospective, pendingNotes }: BlockCreati
     }
     setStrategy(stratResult.data)
 
-    // 3) generate week 1 pool
+    // 3) generate week 1 inventory (writes to session_inventory)
     setGenStage('week1')
-    const previewResult = await loadWeek1Preview(mid)
-    if (!previewResult.success) {
-      setError(previewResult.error)
-      setStep('review')
-      setSubmitting(false)
-      return
-    }
-    const poolResult = await generateSessionPool(previewResult.data.microcycleId)
-    if (!poolResult.success) {
-      setError(poolResult.error)
+    const inventoryResult = await generateMesocycleInventory(mid, 1)
+    if (!inventoryResult.success) {
+      setError(inventoryResult.error)
       setStep('review')
       setSubmitting(false)
       return
     }
 
-    // Prefer the AI-returned sessionPool (has estimatedDurationMinutes for every session)
-    // and fall back to a DB requery if anything is unexpectedly missing.
-    const aiSessions = poolResult.data.sessionPool.sessions
-    const aiWorkouts = poolResult.data.workouts
-    if (aiSessions.length > 0 && aiSessions.length === aiWorkouts.length) {
-      setWeek1Sessions(
-        aiSessions.map((s, i) => ({
-          id: aiWorkouts[i].id,
-          name: s.name,
-          modality: s.modality,
-          duration_minutes: s.estimatedDurationMinutes,
-        })),
-      )
-    } else {
-      const refreshed = await loadWeek1Preview(mid)
-      if (refreshed.success) setWeek1Sessions(refreshed.data.sessions)
-    }
+    // Reload preview from session_inventory (now populated)
+    const refreshed = await loadWeek1Preview(mid)
+    if (refreshed.success) setWeek1Sessions(refreshed.data.sessions)
 
     setStep('preview')
     setSubmitting(false)

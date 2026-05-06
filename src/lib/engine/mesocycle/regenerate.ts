@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { runHeadCoachStrategy } from '@/lib/engine/mesocycle/strategy-generation'
-import { generateSessionPool } from '@/lib/engine/microcycle/generate-pool'
+import { generateMesocycleInventory } from '@/lib/actions/inventory-generation.actions'
 import type { MesocycleStrategyValidated } from '@/lib/ai/schemas/week-brief'
 import type { ActionResult } from '@/lib/types/training.types'
 
@@ -34,31 +34,33 @@ export async function regenerateBlockPlan(
         .eq('user_id', user.id)
     if (clearErr) return { success: false, error: `Strategy clear failed: ${clearErr.message}` }
 
-    // Find week 1 microcycle
+    // Find week 1 microcycle (still needed for any per-week microcycle metadata operations)
     const { data: week1Micro } = await supabase
         .from('microcycles')
-        .select('id')
+        .select('id, week_number')
         .eq('mesocycle_id', mesocycleId)
         .eq('week_number', 1)
         .eq('user_id', user.id)
         .single()
 
-    // Delete week 1 inventory if present
+    // Delete week 1 inventory (correct schema: keyed by mesocycle_id + week_number, not microcycle_id)
     if (week1Micro) {
         await supabase
             .from('session_inventory')
             .delete()
-            .eq('microcycle_id', week1Micro.id)
+            .eq('mesocycle_id', mesocycleId)
+            .eq('week_number', 1)
+            .eq('user_id', user.id)
     }
 
     // Re-run strategy
     const stratResult = await runHeadCoachStrategy(mesocycleId)
     if (!stratResult.success) return { success: false, error: stratResult.error }
 
-    // Re-run week 1 generation
-    if (week1Micro) {
-        const poolResult = await generateSessionPool(week1Micro.id)
-        if (!poolResult.success) return { success: false, error: `Week 1 regen failed: ${poolResult.error}` }
+    // Re-run week 1 generation (writes to session_inventory)
+    const inventoryResult = await generateMesocycleInventory(mesocycleId, 1)
+    if (!inventoryResult.success) {
+        return { success: false, error: `Week 1 regen failed: ${inventoryResult.error}` }
     }
 
     revalidatePath('/data/blocks/new')

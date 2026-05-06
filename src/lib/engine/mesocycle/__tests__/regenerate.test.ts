@@ -7,7 +7,7 @@ const state: any = {
     strategyClearedFor: null,
     week1InventoryDeleted: false,
     runHeadCoachResult: { success: true, data: { strategyRationale: 'rerun' } },
-    poolResult: { success: true, data: { workouts: [], sessionPool: {} } },
+    inventoryResult: { success: true, data: { sessions: 0, weeks: 1 } },
 }
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -30,16 +30,22 @@ vi.mock('@/lib/supabase/server', () => ({
             if (table === 'microcycles') {
                 return {
                     select: vi.fn(() => ({
-                        eq: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn(async () => ({ data: state.week1MicroId ? { id: state.week1MicroId } : null, error: null })) })) })) })),
+                        eq: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn(async () => ({ data: state.week1MicroId ? { id: state.week1MicroId, week_number: 1 } : null, error: null })) })) })) })),
                     })),
                 }
             }
             if (table === 'session_inventory') {
                 return {
-                    delete: vi.fn(() => ({ eq: vi.fn(async () => {
-                        state.week1InventoryDeleted = true
-                        return { error: null }
-                    }) })),
+                    delete: vi.fn(() => ({
+                        eq: vi.fn(() => ({
+                            eq: vi.fn(() => ({
+                                eq: vi.fn(async () => {
+                                    state.week1InventoryDeleted = true
+                                    return { error: null }
+                                }),
+                            })),
+                        })),
+                    })),
                 }
             }
             return {}
@@ -51,8 +57,8 @@ vi.mock('@/lib/engine/mesocycle/strategy-generation', () => ({
     runHeadCoachStrategy: vi.fn(async () => state.runHeadCoachResult),
 }))
 
-vi.mock('@/lib/engine/microcycle/generate-pool', () => ({
-    generateSessionPool: vi.fn(async () => state.poolResult),
+vi.mock('@/lib/actions/inventory-generation.actions', () => ({
+    generateMesocycleInventory: vi.fn(async () => state.inventoryResult),
 }))
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
@@ -67,7 +73,7 @@ describe('regenerateBlockPlan', () => {
         state.strategyClearedFor = null
         state.week1InventoryDeleted = false
         state.runHeadCoachResult = { success: true, data: { strategyRationale: 'rerun' } }
-        state.poolResult = { success: true, data: { workouts: [], sessionPool: {} } }
+        state.inventoryResult = { success: true, data: { sessions: 0, weeks: 1 } }
     })
 
     it('rejects unauthenticated callers', async () => {
@@ -94,8 +100,8 @@ describe('regenerateBlockPlan', () => {
         expect(r.success).toBe(false)
     })
 
-    it('returns error when generateSessionPool fails after strategy succeeds', async () => {
-        state.poolResult = { success: false, error: 'pool down' }
+    it('returns error when generateMesocycleInventory fails after strategy succeeds', async () => {
+        state.inventoryResult = { success: false, error: 'inventory down' }
         const r = await regenerateBlockPlan('meso-1')
         expect(r.success).toBe(false)
     })
