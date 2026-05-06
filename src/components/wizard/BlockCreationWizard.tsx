@@ -8,6 +8,7 @@ import type { MesocycleStrategyValidated } from '@/lib/ai/schemas/week-brief'
 import type { CoachDomain } from '@/lib/skills/types'
 import { type Archetype, ARCHETYPE_LABELS } from '@/lib/wizard/archetypes'
 import { createBlockShell } from '@/lib/engine/mesocycle/create-shell'
+import { discardOrphanBlock, type OrphanBlock } from '@/lib/engine/mesocycle/find-orphan'
 import { runHeadCoachStrategy } from '@/lib/engine/mesocycle/strategy-generation'
 import { generateMesocycleInventory } from '@/lib/actions/inventory-generation.actions'
 import { regenerateBlockPlan } from '@/lib/engine/mesocycle/regenerate'
@@ -27,6 +28,7 @@ import { WeekSessionPoolPreview } from './WeekSessionPoolPreview'
 export interface BlockCreationWizardProps {
   retrospective: BlockRetrospectiveSnapshot | null
   pendingNotes: PendingPlannerNotes | null
+  orphan: OrphanBlock | null
 }
 
 type WizardStep = 'review' | 'generating' | 'preview'
@@ -49,7 +51,7 @@ const CUSTOM_DEFAULTS: Record<CoachDomain, number> = {
   recovery: 0,
 }
 
-export function BlockCreationWizard({ retrospective, pendingNotes }: BlockCreationWizardProps) {
+export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: BlockCreationWizardProps) {
   const router = useRouter()
   const mode: 'first-block' | 'post-block' = retrospective ? 'post-block' : 'first-block'
 
@@ -238,6 +240,34 @@ export function BlockCreationWizard({ retrospective, pendingNotes }: BlockCreati
   // step === 'review'
   return (
     <div className="max-w-2xl mx-auto">
+      {orphan && !mesocycleId && (
+        <section className="px-6 py-5 bg-amber-500/10 border-b border-amber-500/30">
+          <div className="text-[11px] font-inter text-neutral-200 mb-3">
+            You started planning <strong className="text-amber-500">{orphan.name}</strong> on{' '}
+            {new Date(orphan.createdAt).toLocaleDateString()}.
+            {orphan.hasStrategy ? ' Strategy already generated.' : ' Strategy not yet generated.'}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMesocycleId(orphan.mesocycleId)}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-mono font-bold uppercase tracking-wider"
+            >
+              Continue this one
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                await discardOrphanBlock(orphan.mesocycleId)
+                router.refresh()
+              }}
+              className="px-3 py-1.5 border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-[10px] font-mono uppercase tracking-wider"
+            >
+              Discard and start fresh
+            </button>
+          </div>
+        </section>
+      )}
       <header className="px-6 py-6 border-b border-neutral-800">
         <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
           {mode === 'first-block' ? 'Set up your first block' : 'Plan next block'}
