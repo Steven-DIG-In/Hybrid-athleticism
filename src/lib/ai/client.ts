@@ -175,7 +175,13 @@ Please fix these issues and respond with ONLY valid JSON matching the required s
                 model,
                 max_tokens: maxTokens,
                 ...(temperature !== undefined ? { temperature } : {}),
-                system: systemPrompt,
+                system: [
+                    {
+                        type: 'text',
+                        text: systemPrompt,
+                        cache_control: { type: 'ephemeral' },
+                    },
+                ],
                 messages: [{ role: 'user', content: currentUserPrompt }],
             })
 
