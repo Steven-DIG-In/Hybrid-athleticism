@@ -1,5 +1,13 @@
 // src/lib/coaches/configs/mobility.ts
 import type { CoachConfig } from '../types'
+import { MobilityProgramSchema } from '@/lib/ai/schemas/week-brief'
+import type { MobilityProgramValidated } from '@/lib/ai/schemas/week-brief'
+import {
+  buildMobilityProgramSystemPrompt,
+  buildMobilityProgramUserPrompt,
+  buildMobilityModificationSystemPrompt,
+  buildMobilityModificationUserPrompt,
+} from '@/lib/ai/prompts/mobility-coach'
 
 export const mobilityCoachConfig: CoachConfig = {
   id: 'mobility',
@@ -63,4 +71,21 @@ export const mobilityCoachConfig: CoachConfig = {
     ],
   },
   alwaysActive: true,
+  programming: {
+    schema: MobilityProgramSchema,
+    buildSystemPrompt: buildMobilityProgramSystemPrompt,
+    buildUserPrompt: buildMobilityProgramUserPrompt as (...args: unknown[]) => string,
+    buildModSystemPrompt: buildMobilityModificationSystemPrompt,
+    buildModUserPrompt: buildMobilityModificationUserPrompt as (...args: unknown[]) => string,
+    resultKey: 'mobilityProgram',
+    modifiedKey: 'modifiedMobilitySessions',
+    maxTokens: 8192,
+    temperature: 0.6,
+    modTemperature: 0.4,
+    logLabel: 'Mobility',
+    logSummary: (d: unknown) => {
+      const data = d as MobilityProgramValidated
+      return `${data.methodologyUsed}, ${data.weeks.length} weeks`
+    },
+  },
 }
