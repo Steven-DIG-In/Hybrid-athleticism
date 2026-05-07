@@ -159,7 +159,7 @@ Session length: ${a.sessionMinutes} min (warmup ${a.warmupMinutes}, cooldown ${a
 Effective work time per session: ${effective} min
 ${free ? `Free text: ${free}` : ''}
 
-Treat these as authoritative. Total weekly load budget is ${a.daysPerWeek * effective} effective minutes. Plan within this budget.`)
+Treat these as authoritative. Total weekly load budget is ${a.daysPerWeek * effective} effective minutes. Plan within this budget. If the free text mentions equipment or modality preferences (e.g. "no barbell", "calisthenics-focused", "swim instead of run", "open water access"), treat those as overrides to the profile-level equipment list and methodology preferences for this block.`)
     }
 
     // 3. Athlete's availability (first-block: from wizard's AvailabilityForm via ai_context_json.carryover)
@@ -172,7 +172,7 @@ Session length: ${c.sessionMinutes} min (warmup ${c.warmupMinutes}, cooldown ${c
 Effective work time per session: ${effective} min
 ${c.freeText ? `Free text: ${c.freeText}` : ''}
 
-Treat these as authoritative. Total weekly load budget is ${c.daysPerWeek * effective} effective minutes. Plan within this budget.`)
+Treat these as authoritative. Total weekly load budget is ${c.daysPerWeek * effective} effective minutes. Plan within this budget. If the free text mentions equipment or modality preferences (e.g. "no barbell", "calisthenics-focused", "swim instead of run", "open water access"), treat those as overrides to the profile-level equipment list and methodology preferences for this block.`)
     }
 
     // 4. Athlete's requested emphasis (always present when archetype is in ai_context_json)
