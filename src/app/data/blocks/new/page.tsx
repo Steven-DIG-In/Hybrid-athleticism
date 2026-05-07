@@ -7,9 +7,9 @@ import { BlockCreationWizard } from '@/components/wizard/BlockCreationWizard'
 
 export const dynamic = 'force-dynamic'
 // Block-2 wizard fans out 6 parallel AI generations (one per week) plus a
-// head-coach pass. Bump well past the 300s default so the long tail of slow
-// Anthropic responses doesn't kill the function.
-export const maxDuration = 800
+// head-coach pass. Pin to the Hobby-plan ceiling — with the loop now
+// parallelized the wall time should be ~60-90s, but headroom helps.
+export const maxDuration = 300
 
 export default async function NewBlockPage() {
   const supabase = await createClient()
