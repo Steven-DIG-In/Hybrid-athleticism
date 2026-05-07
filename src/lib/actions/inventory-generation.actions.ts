@@ -49,27 +49,45 @@ export async function generateMesocycleInventory(
 
     let totalSessions = 0
 
-    // Generate sessions for each week
-    for (let weekNum = 1; weekNum <= weekCount; weekNum++) {
-        console.log(`[generateMesocycleInventory] Generating inventory for week ${weekNum}/${weekCount}...`)
+    // Pre-resolve all microcycles so we can fan out the AI calls in parallel.
+    // Sequential generation hit Vercel's function timeout on 6+ week blocks.
+    const { data: microcycleRows } = await supabase
+        .from('microcycles')
+        .select('id, week_number')
+        .eq('mesocycle_id', mesocycleId)
+        .eq('user_id', user.id)
+        .gte('week_number', 1)
+        .lte('week_number', weekCount)
+        .order('week_number', { ascending: true })
 
-        // Find microcycle for this week
-        const { data: microcycle } = await supabase
-            .from('microcycles')
-            .select('id')
-            .eq('mesocycle_id', mesocycleId)
-            .eq('week_number', weekNum)
-            .eq('user_id', user.id)
-            .maybeSingle()
+    const microcycleByWeek = new Map<number, string>()
+    for (const mc of microcycleRows ?? []) {
+        microcycleByWeek.set(mc.week_number, mc.id)
+    }
 
-        if (!microcycle) {
-            console.warn(`[generateMesocycleInventory] No microcycle found for week ${weekNum}, skipping...`)
-            continue
-        }
+    // Run all weeks' AI generations in parallel. Each generateSessionPool
+    // operates on its own microcycle (no cross-week DB contention) and reads
+    // shared profile/benchmark context which is safe to read concurrently.
+    console.log(`[generateMesocycleInventory] Generating ${weekCount} weeks in parallel...`)
+    const poolResults = await Promise.all(
+        Array.from({ length: weekCount }, (_, i) => {
+            const weekNum = i + 1
+            const mcId = microcycleByWeek.get(weekNum)
+            if (!mcId) {
+                console.warn(`[generateMesocycleInventory] No microcycle found for week ${weekNum}, skipping...`)
+                return Promise.resolve(null as null | Awaited<ReturnType<typeof generateSessionPool>>)
+            }
+            return generateSessionPool(mcId)
+        })
+    )
 
-        // Call existing AI programming to generate sessions
-        const poolResult = await generateSessionPool(microcycle.id)
+    // Process the results sequentially so DB writes don't race each other on
+    // the workouts/session_inventory tables.
+    for (let i = 0; i < weekCount; i++) {
+        const weekNum = i + 1
+        const poolResult = poolResults[i]
 
+        if (!poolResult) continue
         if (!poolResult.success) {
             console.error(`[generateMesocycleInventory] Failed week ${weekNum}:`, poolResult.error)
             continue
