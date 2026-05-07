@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { LayoutDashboard, PlusSquare, History, BarChart3, BrainCircuit, Wrench } from "lucide-react"
+import { LayoutDashboard, PlusSquare, BarChart3, BrainCircuit, Wrench } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function BottomNav() {
@@ -10,8 +10,7 @@ export function BottomNav() {
 
     const tabs = [
         { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-        { name: "Log", href: "/log", icon: PlusSquare },
-        { name: "History", href: "/history", icon: History },
+        { name: "Log", href: "/log-session", icon: PlusSquare },
         { name: "Data", href: "/data", icon: BarChart3 },
         { name: "Coach", href: "/coach", icon: BrainCircuit },
     ]
