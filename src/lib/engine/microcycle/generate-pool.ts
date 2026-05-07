@@ -302,12 +302,24 @@ export async function generateSessionPool(
         }
     }
 
-    // ─── Step 4f: Build methodology-specific context ─────────────────────────
+    // ─── Step 4f: Parse head-coach strategy (used by methodology context + week briefs) ──
+    let strategy: MesocycleStrategyValidated | null = null
+    const aiCtx = (mesocycleData.ai_context_json ?? {}) as Record<string, unknown>
+    const rawStrategy = aiCtx.strategy
+    if (rawStrategy) {
+        const parsed = MesocycleStrategySchema.safeParse(rawStrategy)
+        if (parsed.success) strategy = parsed.data
+    }
+
+    // ─── Step 4g: Build methodology-specific context ─────────────────────────
+    // Strategy is passed so per-block methodology decisions override
+    // 'ai_decides' on the profile (e.g. block 2 says 5/3/1 but profile is unset).
     const methodologyContext = await buildMethodologyContext(
-        profile, latestBenchmarks, microcycle.week_number, mesocycleData.week_count, microcycle.is_deload
+        profile, latestBenchmarks, microcycle.week_number, mesocycleData.week_count, microcycle.is_deload,
+        strategy,
     )
 
-    // ─── Step 4g: Read mesocycle plan (if generated) ─────────────────────────
+    // ─── Step 4h: Read mesocycle plan (if generated) ─────────────────────────
     let mesocyclePlan: ProgrammingContext['mesocyclePlan']
     const rawPlan = (mesocycleData as any).ai_context_json?.mesocyclePlan
     if (rawPlan) {
@@ -343,17 +355,9 @@ export async function generateSessionPool(
         mesocyclePlan,
     }
 
-    // ─── Step 5b: Read head-coach strategy from mesocycle.ai_context_json ────
-    // (set by D's wizard). Backward-compatible: if no strategy (Block 1),
-    // weekBriefs is [] and the prompt falls back to today's behavior.
-    let strategy: MesocycleStrategyValidated | null = null
-    const aiCtx = (mesocycleData.ai_context_json ?? {}) as Record<string, unknown>
-    const rawStrategy = aiCtx.strategy
-    if (rawStrategy) {
-        const parsed = MesocycleStrategySchema.safeParse(rawStrategy)
-        if (parsed.success) strategy = parsed.data
-    }
-
+    // ─── Step 5b: Derive per-coach weekBriefs from the head-coach strategy ───
+    // Backward-compatible: if no strategy (Block 1), weekBriefs is [] and the
+    // prompt falls back to today's behavior.
     // If strategy is present, derive per-coach weekBriefs for this week from
     // its domainAllocations (coachingTeam isn't loaded in this function).
     const weekBriefs = strategy
@@ -514,11 +518,13 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
     }
 
     // ─── Step 10: Store the AI context on the mesocycle for debugging ────────
+    // Preserve the wizard-written archetype/carryover/strategy fields by
+    // spreading the existing ai_context_json before merging in run metadata.
     await supabase
         .from('mesocycles')
         .update({
             ai_context_json: {
-                ...(typeof mesocycleData === 'object' ? {} : {}),
+                ...(mesocycleData.ai_context_json ?? {}),
                 lastGeneratedWeek: microcycle.week_number,
                 generatedAt: new Date().toISOString(),
                 aiModel: aiResult.metadata?.model,

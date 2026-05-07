@@ -3,6 +3,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const state: any = {
     user: { id: 'user-1' },
     mesoUpdated: null as any,
+    aiContextJson: null as Record<string, unknown> | null,
+    profileUpdated: null as any,
     week1MicroId: 'micro-1',
     pointerInserted: null as any,
     notesCleared: false,
@@ -16,7 +18,16 @@ vi.mock('@/lib/supabase/server', () => ({
             if (table === 'mesocycles') {
                 return {
                     update: vi.fn((patch: any) => ({
-                        eq: vi.fn(() => ({ eq: vi.fn(async () => { state.mesoUpdated = patch; return { error: null } }) })),
+                        eq: vi.fn(() => ({
+                            eq: vi.fn(() => ({
+                                select: vi.fn(() => ({
+                                    single: vi.fn(async () => {
+                                        state.mesoUpdated = patch
+                                        return { data: { ai_context_json: state.aiContextJson }, error: null }
+                                    }),
+                                })),
+                            })),
+                        })),
                     })),
                 }
             }
@@ -28,6 +39,13 @@ vi.mock('@/lib/supabase/server', () => ({
             if (table === 'block_pointer') {
                 return {
                     upsert: vi.fn(async (row: any) => { state.pointerInserted = row; return { error: null } }),
+                }
+            }
+            if (table === 'profiles') {
+                return {
+                    update: vi.fn((patch: any) => ({
+                        eq: vi.fn(async () => { state.profileUpdated = patch; return { error: null } }),
+                    })),
                 }
             }
             return {}
@@ -47,6 +65,8 @@ describe('approveBlockPlan', () => {
     beforeEach(() => {
         state.user = { id: 'user-1' }
         state.mesoUpdated = null
+        state.aiContextJson = null
+        state.profileUpdated = null
         state.week1MicroId = 'micro-1'
         state.pointerInserted = null
         state.notesCleared = false
@@ -81,5 +101,30 @@ describe('approveBlockPlan', () => {
         state.week1MicroId = null
         const r = await approveBlockPlan('meso-1')
         expect(r.success).toBe(false)
+    })
+
+    it('persists profile.strength_methodology when strategy specifies 5/3/1', async () => {
+        state.aiContextJson = {
+            strategy: {
+                domainAllocations: [
+                    { coach: 'strength', methodologyDirective: 'Wendler 5/3/1 leader template' },
+                    { coach: 'mobility', methodologyDirective: 'flow-based' },
+                ],
+            },
+        }
+        await approveBlockPlan('meso-1')
+        expect(state.profileUpdated).toEqual({ strength_methodology: '531' })
+    })
+
+    it('leaves profile untouched when strategy directive does not map cleanly', async () => {
+        state.aiContextJson = {
+            strategy: {
+                domainAllocations: [
+                    { coach: 'strength', methodologyDirective: 'experimental block — coach decides on the fly' },
+                ],
+            },
+        }
+        await approveBlockPlan('meso-1')
+        expect(state.profileUpdated).toBeNull()
     })
 })

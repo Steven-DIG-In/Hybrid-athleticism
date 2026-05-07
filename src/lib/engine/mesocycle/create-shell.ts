@@ -27,14 +27,6 @@ export interface CreateBlockShellInput {
     }
 }
 
-function getNextMonday(from: Date): Date {
-    const d = new Date(from)
-    const day = d.getDay()
-    const offset = day === 0 ? 1 : (8 - day) % 7 || 7
-    d.setDate(d.getDate() + offset)
-    return d
-}
-
 export async function createBlockShell(
     input: CreateBlockShellInput,
     blockNumberOverride?: number,
@@ -53,7 +45,9 @@ export async function createBlockShell(
         blockNumber = (count ?? 0) + 1
     }
 
-    const startDate = getNextMonday(new Date())
+    // Day-based scheduling: block starts today; Day 1 of allocation falls
+    // on whichever calendar day the athlete first hits "Allocate".
+    const startDate = new Date()
     const name = `${input.archetype.toUpperCase()} Block ${blockNumber}`
 
     const { data: meso, error: mesoErr } = await supabase

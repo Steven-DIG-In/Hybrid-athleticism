@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { clearPendingPlannerNotes } from '@/lib/actions/pending-notes.actions'
 import type { ActionResult } from '@/lib/types/training.types'
+import {
+    methodologyEnumFromStrategy,
+    type StrategyShape,
+} from './methodology-mapping'
 
 /**
  * Approve a drafted block plan and start it.
@@ -20,13 +24,33 @@ export async function approveBlockPlan(
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return { success: false, error: 'Not authenticated' }
 
-    // Flip mesocycle.is_active = true (scoped to caller).
-    const { error: mesoErr } = await supabase
+    // Flip mesocycle.is_active = true (scoped to caller). Read ai_context_json
+    // back so we can inspect the head-coach strategy below.
+    const { data: meso, error: mesoErr } = await supabase
         .from('mesocycles')
         .update({ is_active: true })
         .eq('id', mesocycleId)
         .eq('user_id', user.id)
+        .select('ai_context_json')
+        .single()
     if (mesoErr) return { success: false, error: mesoErr.message }
+
+    // Persist the strategy's methodology choice onto the profile so subsequent
+    // generation paths (including regenerations) feed the correct lifting
+    // protocol into the AI prompt. Only writes when the directive maps cleanly;
+    // unknown directives leave the profile field untouched.
+    const strategy = (meso?.ai_context_json as Record<string, unknown> | null)?.strategy as
+        StrategyShape | undefined
+    const strengthEnum = methodologyEnumFromStrategy(strategy)
+    if (strengthEnum) {
+        const { error: profileErr } = await supabase
+            .from('profiles')
+            .update({ strength_methodology: strengthEnum })
+            .eq('id', user.id)
+        if (profileErr) {
+            console.warn('[approveBlockPlan] strength_methodology persist failed:', profileErr.message)
+        }
+    }
 
     // Confirm a week 1 microcycle exists — the pointer is meaningless without it.
     const { data: week1Micro, error: microErr } = await supabase
