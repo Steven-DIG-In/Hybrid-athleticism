@@ -33,9 +33,13 @@ export async function DashboardNoActiveBlockEmpty() {
             <ArrowRight className="w-3 h-3" />
           </Link>
         )}
-        <p className="text-[10px] font-mono text-neutral-600 uppercase tracking-wider mt-1">
-          Block 2 wizard ships next
-        </p>
+        <Link
+          href="/data/blocks/new"
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-mono font-bold uppercase tracking-wider"
+        >
+          Start next block
+          <ArrowRight className="w-3 h-3" />
+        </Link>
       </div>
     </div>
   )

@@ -23,6 +23,11 @@ import {
     calculateDanielsVDOT,
     formatPace,
 } from '@/lib/training/methodology-helpers'
+import {
+    strengthMethodologyFromDirective,
+    enduranceMethodologyFromDirective,
+    type StrategyShape,
+} from '@/lib/engine/mesocycle/methodology-mapping'
 
 /**
  * Build a methodology context object from profile preferences + benchmarks.
@@ -39,12 +44,27 @@ export async function buildMethodologyContext(
     benchmarks: AthleteBenchmark[],
     weekNumber: number,
     totalWeeks: number,
-    isDeload: boolean
+    isDeload: boolean,
+    strategy?: StrategyShape | null,
 ): Promise<MethodologyContext | undefined> {
     const ctx: MethodologyContext = {}
-    const strengthMethod = profile.strength_methodology ?? 'ai_decides'
+
+    // Profile preferences are the default. When unset (null/'ai_decides') and a
+    // head-coach strategy is available, the strategy's methodologyDirective
+    // takes precedence so per-block decisions actually drive programming.
+    const profileStrength = profile.strength_methodology ?? 'ai_decides'
+    const profileEndurance = profile.endurance_methodology ?? 'ai_decides'
+
+    const strengthAlloc = strategy?.domainAllocations?.find(d => d.coach === 'strength')
+    const enduranceAlloc = strategy?.domainAllocations?.find(d => d.coach === 'endurance')
+
+    const strengthMethod = profileStrength !== 'ai_decides'
+        ? profileStrength
+        : (strengthMethodologyFromDirective(strengthAlloc?.methodologyDirective) ?? 'ai_decides')
+    const enduranceMethod = profileEndurance !== 'ai_decides'
+        ? profileEndurance
+        : (enduranceMethodologyFromDirective(enduranceAlloc?.methodologyDirective) ?? 'ai_decides')
     const hypertrophyMethod = profile.hypertrophy_methodology ?? 'ai_decides'
-    const enduranceMethod = profile.endurance_methodology ?? 'ai_decides'
     const experience = (profile.lifting_experience ?? 'intermediate') as 'beginner' | 'intermediate' | 'advanced'
 
     // ─── 5/3/1 Protocol ──────────────────────────────────────────────────

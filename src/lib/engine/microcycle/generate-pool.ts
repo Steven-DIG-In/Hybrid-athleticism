@@ -26,6 +26,8 @@ import {
 import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
 import { buildMethodologyContext } from '@/lib/engine/_shared/methodology-context'
 import { deduplicateBenchmarks } from '@/lib/engine/mesocycle/context'
+import { extractWeekBrief } from '@/lib/engine/mesocycle/strategy'
+import { MesocycleStrategySchema, type MesocycleStrategyValidated } from '@/lib/ai/schemas/week-brief'
 import {
     insertLiftingSets,
     insertEnduranceTarget,
@@ -300,12 +302,24 @@ export async function generateSessionPool(
         }
     }
 
-    // ─── Step 4f: Build methodology-specific context ─────────────────────────
+    // ─── Step 4f: Parse head-coach strategy (used by methodology context + week briefs) ──
+    let strategy: MesocycleStrategyValidated | null = null
+    const aiCtx = (mesocycleData.ai_context_json ?? {}) as Record<string, unknown>
+    const rawStrategy = aiCtx.strategy
+    if (rawStrategy) {
+        const parsed = MesocycleStrategySchema.safeParse(rawStrategy)
+        if (parsed.success) strategy = parsed.data
+    }
+
+    // ─── Step 4g: Build methodology-specific context ─────────────────────────
+    // Strategy is passed so per-block methodology decisions override
+    // 'ai_decides' on the profile (e.g. block 2 says 5/3/1 but profile is unset).
     const methodologyContext = await buildMethodologyContext(
-        profile, latestBenchmarks, microcycle.week_number, mesocycleData.week_count, microcycle.is_deload
+        profile, latestBenchmarks, microcycle.week_number, mesocycleData.week_count, microcycle.is_deload,
+        strategy,
     )
 
-    // ─── Step 4g: Read mesocycle plan (if generated) ─────────────────────────
+    // ─── Step 4h: Read mesocycle plan (if generated) ─────────────────────────
     let mesocyclePlan: ProgrammingContext['mesocyclePlan']
     const rawPlan = (mesocycleData as any).ai_context_json?.mesocyclePlan
     if (rawPlan) {
@@ -341,9 +355,41 @@ export async function generateSessionPool(
         mesocyclePlan,
     }
 
+    // ─── Step 5b: Derive per-coach weekBriefs from the head-coach strategy ───
+    // Backward-compatible: if no strategy (Block 1), weekBriefs is [] and the
+    // prompt falls back to today's behavior.
+    // If strategy is present, derive per-coach weekBriefs for this week from
+    // its domainAllocations (coachingTeam isn't loaded in this function).
+    const weekBriefs = strategy
+        ? strategy.domainAllocations
+            .map(d => ({
+                coach: d.coach,
+                brief: extractWeekBrief(strategy!, d.coach, microcycle.week_number),
+            }))
+            .filter(x => x.brief !== null)
+        : []
+
     // ─── Step 6: Call the AI Programming Engine ──────────────────────────────
     const systemPrompt = buildProgrammingSystemPrompt()
-    const userPrompt = buildProgrammingUserPrompt(programmingContext)
+    const baseUserPrompt = buildProgrammingUserPrompt(programmingContext)
+
+    const weekBriefSection = weekBriefs.length > 0
+        ? `\n\n── HEAD COACH'S BRIEF FOR THIS WEEK ──\n${weekBriefs
+            .map(({ coach, brief }) => {
+                if (!brief) return ''
+                return `### ${coach}
+Sessions this week: ${brief.sessionsToGenerate}
+Load budget per session: ${brief.loadBudget}/10
+Week emphasis: ${brief.weekEmphasis}
+Volume: ${brief.volumePercent}% of MRV
+${brief.isDeload ? '(deload week)' : ''}
+Methodology directive: ${brief.methodologyDirective}
+Constraints: ${brief.constraints.join('; ') || '(none)'}`
+            })
+            .filter(Boolean)
+            .join('\n\n')}\n\nGenerate sessions that respect each coach's brief.`
+        : ''
+    const userPrompt = baseUserPrompt + weekBriefSection
 
     const goalArchetype = profile.goal_archetype ?? mesocycleData.goal ?? 'hybrid_fitness'
     const validatedSchema = createValidatedSessionPoolSchema(goalArchetype)
@@ -472,11 +518,13 @@ export async function generateSessionPool(
     }
 
     // ─── Step 10: Store the AI context on the mesocycle for debugging ────────
+    // Preserve the wizard-written archetype/carryover/strategy fields by
+    // spreading the existing ai_context_json before merging in run metadata.
     await supabase
         .from('mesocycles')
         .update({
             ai_context_json: {
-                ...(typeof mesocycleData === 'object' ? {} : {}),
+                ...(mesocycleData.ai_context_json ?? {}),
                 lastGeneratedWeek: microcycle.week_number,
                 generatedAt: new Date().toISOString(),
                 aiModel: aiResult.metadata?.model,

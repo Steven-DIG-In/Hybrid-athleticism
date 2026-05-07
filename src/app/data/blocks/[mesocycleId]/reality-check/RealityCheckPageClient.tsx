@@ -5,7 +5,7 @@ import { RealityCheckForm } from '@/components/reality-check/RealityCheckForm'
 import type { AvailabilityAnswers } from '@/lib/types/pending-planner-notes.types'
 
 export function RealityCheckPageClient({
-  mesocycleId, defaults, prefill,
+  defaults, prefill,
 }: {
   mesocycleId: string
   defaults: AvailabilityAnswers
@@ -13,7 +13,7 @@ export function RealityCheckPageClient({
 }) {
   const router = useRouter()
   const handleComplete = () => {
-    router.push(`/data/blocks/${mesocycleId}/retrospective`)
+    router.push('/data/blocks/new')
     router.refresh()
   }
   return (

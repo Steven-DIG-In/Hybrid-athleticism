@@ -365,11 +365,11 @@ export default function OnboardingPage() {
                 if (!trainRes.success) console.error('[saveRecentTraining]', trainRes.error)
             }
 
-            // 5. Complete onboarding (creates mesocycle + microcycles)
+            // 5. Complete onboarding (profile-only; block creation happens in the wizard)
             const completeRes = await completeOnboarding(benchmarkPath ?? 'ai_estimated')
             if (completeRes.success) {
                 // Brief delay for the animation to show
-                setTimeout(() => router.push('/dashboard'), 2000)
+                setTimeout(() => router.push('/data/blocks/new'), 2000)
             } else {
                 setError(completeRes.error)
                 setIsSubmitting(false)
