@@ -112,7 +112,7 @@ export default async function DashboardPage({
                 />
             )}
 
-            {showNudge && data.currentMesocycle.end_date && (
+            {showNudge && !blockIsEmpty && data.currentMesocycle.end_date && (
                 <CloseBlockNudgeBanner
                     mesocycleId={data.currentMesocycle.id}
                     blockName={data.currentMesocycle.name}
