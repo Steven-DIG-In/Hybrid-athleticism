@@ -48,6 +48,7 @@ export async function generateMesocycleInventory(
     }
 
     let totalSessions = 0
+    const weekErrors: string[] = []
 
     // Pre-resolve all microcycles so we can fan out the AI calls in parallel.
     // Sequential generation hit Vercel's function timeout on 6+ week blocks.
@@ -87,9 +88,13 @@ export async function generateMesocycleInventory(
         const weekNum = i + 1
         const poolResult = poolResults[i]
 
-        if (!poolResult) continue
+        if (!poolResult) {
+            weekErrors.push(`week ${weekNum}: missing microcycle`)
+            continue
+        }
         if (!poolResult.success) {
             console.error(`[generateMesocycleInventory] Failed week ${weekNum}:`, poolResult.error)
+            weekErrors.push(`week ${weekNum}: ${poolResult.error}`)
             continue
         }
 
@@ -165,6 +170,19 @@ export async function generateMesocycleInventory(
         }
 
         console.log(`[generateMesocycleInventory] Week ${weekNum}: Created ${workouts.length} inventory sessions`)
+    }
+
+    // Hard-fail when generation produced zero sessions. Previously the function
+    // returned success:true with sessions:0, which let the wizard advance to an
+    // empty preview, approve the block, and trap the athlete in a polling loop
+    // on a permanently empty dashboard.
+    if (totalSessions === 0) {
+        return {
+            success: false,
+            error: weekErrors.length > 0
+                ? `Generation failed for all requested weeks: ${weekErrors.join('; ')}`
+                : 'Generation produced zero sessions',
+        }
     }
 
     // Auto-allocate Week 1 so the athlete can start training immediately

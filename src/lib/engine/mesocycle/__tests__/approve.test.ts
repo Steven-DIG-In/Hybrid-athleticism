@@ -9,6 +9,7 @@ const state: any = {
     pointerInserted: null as any,
     notesCleared: false,
     micErr: null as any,
+    week1InventoryCount: 1,
 }
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -48,6 +49,17 @@ vi.mock('@/lib/supabase/server', () => ({
                     })),
                 }
             }
+            if (table === 'session_inventory') {
+                return {
+                    select: vi.fn(() => ({
+                        eq: vi.fn(() => ({
+                            eq: vi.fn(() => ({
+                                eq: vi.fn(async () => ({ count: state.week1InventoryCount, error: null })),
+                            })),
+                        })),
+                    })),
+                }
+            }
             return {}
         }),
     })),
@@ -71,6 +83,7 @@ describe('approveBlockPlan', () => {
         state.pointerInserted = null
         state.notesCleared = false
         state.micErr = null
+        state.week1InventoryCount = 1
     })
 
     it('rejects unauthenticated callers', async () => {
@@ -101,6 +114,13 @@ describe('approveBlockPlan', () => {
         state.week1MicroId = null
         const r = await approveBlockPlan('meso-1')
         expect(r.success).toBe(false)
+    })
+
+    it('refuses to activate a mesocycle with zero week-1 inventory rows', async () => {
+        state.week1InventoryCount = 0
+        const r = await approveBlockPlan('meso-1')
+        expect(r.success).toBe(false)
+        expect(state.mesoUpdated).toBeNull()
     })
 
     it('persists profile.strength_methodology when strategy specifies 5/3/1', async () => {

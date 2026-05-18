@@ -24,6 +24,24 @@ export async function approveBlockPlan(
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return { success: false, error: 'Not authenticated' }
 
+    // Refuse to activate a mesocycle with no week-1 inventory. A 0-row block is
+    // unusable — the dashboard polls inventory forever and the athlete cannot
+    // start training. This is a defense-in-depth check: generateMesocycleInventory
+    // is supposed to reject the upstream wizard call before approve is reached.
+    const { count: week1Count, error: countErr } = await supabase
+        .from('session_inventory')
+        .select('id', { count: 'exact', head: true })
+        .eq('mesocycle_id', mesocycleId)
+        .eq('user_id', user.id)
+        .eq('week_number', 1)
+    if (countErr) return { success: false, error: `Inventory check failed: ${countErr.message}` }
+    if ((week1Count ?? 0) === 0) {
+        return {
+            success: false,
+            error: 'Week 1 has no sessions — regenerate the plan before approving.',
+        }
+    }
+
     // Flip mesocycle.is_active = true (scoped to caller). Read ai_context_json
     // back so we can inspect the head-coach strategy below.
     const { data: meso, error: mesoErr } = await supabase

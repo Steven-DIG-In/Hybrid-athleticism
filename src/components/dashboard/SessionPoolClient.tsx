@@ -266,7 +266,7 @@ function SessionCard({
 
 // ─── Main Session Pool Client Component ─────────────────────────────────────
 
-export function SessionPoolClient({ data }: { data: DashboardData }) {
+export function SessionPoolClient({ data, blockIsEmpty = false }: { data: DashboardData; blockIsEmpty?: boolean }) {
     const router = useRouter()
     const [isRegenerating, startRegenerate] = useTransition()
     const [isGeneratingNext, startGenerateNext] = useTransition()
@@ -309,13 +309,16 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
         return computeWeekLoad(allWorkouts, mesocycleStartDate, mesocycleEndDate)
     }, [allWorkouts, mesocycleStartDate, mesocycleEndDate])
 
-    // Fetch unscheduled inventory when component mounts or mesocycle changes
-    // Poll every 5 seconds if inventory is empty (generation in progress)
+    // Fetch unscheduled inventory when component mounts or mesocycle changes.
+    // No polling — generation is synchronous in the wizard, so an empty
+    // inventory means generation failed, not "in progress". The dashboard
+    // surfaces a recovery banner in that case (blockIsEmpty) which the athlete
+    // uses to manually retrigger via regenerateBlockPlan.
     useEffect(() => {
         if (!currentMesocycle?.id) return
+        if (blockIsEmpty) return
 
         let isMounted = true
-        let pollInterval: NodeJS.Timeout | null = null
 
         const fetchInventory = async () => {
             if (!isMounted) return
@@ -327,32 +330,16 @@ export function SessionPoolClient({ data }: { data: DashboardData }) {
 
             if (result.success && result.data) {
                 setInventory(result.data)
-
-                // Stop polling if we have inventory
-                if (result.data.totalSessions > 0 && pollInterval) {
-                    clearInterval(pollInterval)
-                    pollInterval = null
-                }
             }
             setLoadingInventory(false)
         }
 
-        // Initial fetch
         fetchInventory()
-
-        // Start polling after 5 seconds (give time for first fetch)
-        const startPolling = setTimeout(() => {
-            if (isMounted) {
-                pollInterval = setInterval(fetchInventory, 5000)
-            }
-        }, 5000)
 
         return () => {
             isMounted = false
-            clearTimeout(startPolling)
-            if (pollInterval) clearInterval(pollInterval)
         }
-    }, [currentMesocycle?.id])
+    }, [currentMesocycle?.id, blockIsEmpty])
 
     const openRegenDrawer = (workoutId: string, workoutName: string) => {
         setDrawerMode('regenerate')

@@ -4,6 +4,7 @@ import { SessionPoolClient } from "@/components/dashboard/SessionPoolClient"
 import { DashboardNoActiveBlockEmpty } from "@/components/dashboard/DashboardNoActiveBlockEmpty"
 import { CloseBlockCta } from "@/components/dashboard/CloseBlockCta"
 import { CloseBlockNudgeBanner } from "@/components/dashboard/CloseBlockNudgeBanner"
+import { BlockEmptyRecoveryBanner } from "@/components/dashboard/BlockEmptyRecoveryBanner"
 import { createClient } from "@/lib/supabase/server"
 import { evaluateOverrunSignal } from "@/lib/analytics/overrun-signal"
 import { OverrunSignalBanner } from "@/components/reality-check/OverrunSignalBanner"
@@ -48,6 +49,20 @@ export default async function DashboardPage({
     const overrunSignal = user
         ? await evaluateOverrunSignal(user.id)
         : { shouldFire: false as const, evidence: null }
+
+    // Detect "active block with zero week-1 inventory" — a stuck state when the
+    // wizard's generation step silently produced no sessions. Surfaces a
+    // recovery banner with a regenerate CTA instead of letting the session-pool
+    // poll spin forever.
+    const { count: week1InventoryCount } = user
+        ? await supabase
+            .from('session_inventory')
+            .select('id', { count: 'exact', head: true })
+            .eq('mesocycle_id', data.currentMesocycle.id)
+            .eq('user_id', user.id)
+            .eq('week_number', 1)
+        : { count: 0 }
+    const blockIsEmpty = (week1InventoryCount ?? 0) === 0
 
     // Profile defaults for the modal that opens from the banner.
     // available_days + session_duration_minutes live on profiles, not mesocycles.
@@ -105,8 +120,15 @@ export default async function DashboardPage({
                 />
             )}
 
+            {blockIsEmpty && (
+                <BlockEmptyRecoveryBanner
+                    mesocycleId={data.currentMesocycle.id}
+                    blockName={data.currentMesocycle.name}
+                />
+            )}
+
             {/* Session Pool — all interactivity lives in the client component */}
-            <SessionPoolClient data={data} />
+            <SessionPoolClient data={data} blockIsEmpty={blockIsEmpty} />
         </div>
     )
 }
