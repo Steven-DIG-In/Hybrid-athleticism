@@ -458,9 +458,7 @@ export function SessionPoolClient({ data, blockIsEmpty = false }: { data: Dashbo
         startGenerateNext(async () => {
             const result = await generateNextWeekPool()
             if (result.success) {
-                // Navigate to the generated week
-                const generatedWeek = result.data.sessionPool.weekNumber
-                router.push(`/dashboard?week=${generatedWeek}`)
+                router.push(`/dashboard?week=${result.data.weekNumber}`)
                 router.refresh()
             } else {
                 console.error('Generate next week failed:', result.error)

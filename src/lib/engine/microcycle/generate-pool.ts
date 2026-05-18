@@ -551,11 +551,15 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
 // ─── Generate Next Week ─────────────────────────────────────────────────────
 
 /**
- * Generate the session pool for the next unprogrammed week in the active mesocycle.
- * Called from the dashboard when the current week ends.
+ * Generate session inventory for the next unprogrammed week in the active
+ * mesocycle. Called from the dashboard when the current week ends.
+ *
+ * "Unprogrammed" here means no session_inventory rows yet (not just no
+ * workouts) — the inventory model is what the dashboard reads, so we must
+ * generate inventory rather than calling generateSessionPool directly.
  */
 export async function generateNextWeekPool(): Promise<
-    ActionResult<{ workouts: Workout[]; sessionPool: WeeklySessionPool }>
+    ActionResult<{ sessions: number; weekNumber: number; mesocycleId: string }>
 > {
     const supabase = await createClient()
 
@@ -564,10 +568,9 @@ export async function generateNextWeekPool(): Promise<
         return { success: false, error: 'Not authenticated' }
     }
 
-    // Find the next microcycle without workouts in the active mesocycle
     const { data: microcycles, error: mcError } = await supabase
         .from('microcycles')
-        .select('id, week_number, mesocycles!inner(is_active)')
+        .select('id, week_number, mesocycle_id, mesocycles!inner(is_active)')
         .eq('user_id', user.id)
         .eq('mesocycles.is_active', true)
         .order('week_number', { ascending: true })
@@ -576,22 +579,23 @@ export async function generateNextWeekPool(): Promise<
         return { success: false, error: 'No active mesocycle found' }
     }
 
-    // Find the first microcycle that has no workouts yet
     for (const mc of microcycles) {
         const { count } = await supabase
-            .from('workouts')
+            .from('session_inventory')
             .select('id', { count: 'exact', head: true })
-            .eq('microcycle_id', mc.id)
+            .eq('mesocycle_id', mc.mesocycle_id)
+            .eq('week_number', mc.week_number)
             .eq('user_id', user.id)
 
         if ((count ?? 0) === 0) {
-            return generateSessionPool(mc.id)
+            const { generateWeekInventory } = await import('@/lib/actions/inventory-generation.actions')
+            return generateWeekInventory(mc.id)
         }
     }
 
     return {
         success: false,
-        error: 'All weeks in the current mesocycle already have sessions generated.',
+        error: 'All weeks in the current mesocycle already have inventory generated.',
     }
 }
 
