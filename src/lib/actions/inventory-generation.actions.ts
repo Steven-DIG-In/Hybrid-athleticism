@@ -66,6 +66,28 @@ export async function generateMesocycleInventory(
         microcycleByWeek.set(mc.week_number, mc.id)
     }
 
+    // Pre-clean any orphan workouts on the target microcycles. A prior partial
+    // run (e.g. killed by Vercel's 300s timeout mid-loop) can leave non-completed
+    // workouts behind that were never converted to session_inventory. They show
+    // up in the dashboard's week view because they share a microcycle and a
+    // placeholder scheduled_date. Clean them here so generation is idempotent.
+    const targetMicrocycleIds = Array.from(microcycleByWeek.values())
+    if (targetMicrocycleIds.length > 0) {
+        const { data: stale } = await supabase
+            .from('workouts')
+            .select('id')
+            .in('microcycle_id', targetMicrocycleIds)
+            .eq('user_id', user.id)
+            .eq('is_completed', false)
+        const staleIds = (stale ?? []).map(w => w.id)
+        if (staleIds.length > 0) {
+            console.log(`[generateMesocycleInventory] Pre-clean: removing ${staleIds.length} stale workouts`)
+            await supabase.from('exercise_sets').delete().in('workout_id', staleIds)
+            await supabase.from('cardio_logs').delete().in('workout_id', staleIds)
+            await supabase.from('workouts').delete().in('id', staleIds).eq('user_id', user.id)
+        }
+    }
+
     // Run all weeks' AI generations in parallel. Each generateSessionPool
     // operates on its own microcycle (no cross-week DB contention) and reads
     // shared profile/benchmark context which is safe to read concurrently.

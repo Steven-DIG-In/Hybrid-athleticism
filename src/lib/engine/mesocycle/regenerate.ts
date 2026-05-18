@@ -51,6 +51,24 @@ export async function regenerateBlockPlan(
             .eq('mesocycle_id', mesocycleId)
             .eq('week_number', 1)
             .eq('user_id', user.id)
+
+        // Also delete any week-1 workouts (orphans from prior partial-failure runs
+        // AND any completed-but-stale runs). generateMesocycleInventory inserts
+        // temporary workouts that get cleaned up on success, but a mid-run
+        // Vercel timeout can leave the workouts table populated with rows that
+        // have scheduled_date = today and confuse the dashboard.
+        const { data: orphanWorkouts } = await supabase
+            .from('workouts')
+            .select('id')
+            .eq('microcycle_id', week1Micro.id)
+            .eq('user_id', user.id)
+            .eq('is_completed', false)
+        const orphanIds = (orphanWorkouts ?? []).map(w => w.id)
+        if (orphanIds.length > 0) {
+            await supabase.from('exercise_sets').delete().in('workout_id', orphanIds)
+            await supabase.from('cardio_logs').delete().in('workout_id', orphanIds)
+            await supabase.from('workouts').delete().in('id', orphanIds).eq('user_id', user.id)
+        }
     }
 
     // Re-run strategy

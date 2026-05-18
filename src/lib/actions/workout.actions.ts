@@ -524,7 +524,10 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
         allSessionsResolved = (pendingActive ?? 0) === 0
     }
 
-    // Fetch all workouts for this microcycle with their exercise sets
+    // Fetch all workouts for this microcycle with their exercise sets.
+    // Filter out orphan workouts (no inventory link, not completed) — these are
+    // leftovers from partial generations and would otherwise pollute the week
+    // view with sessions that have placeholder scheduled_date = microcycle.start_date.
     let sessionPool: WorkoutWithSets[] = []
     if (currentWeek) {
         const { data: workouts } = await supabase
@@ -535,6 +538,7 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             `)
             .eq('microcycle_id', (currentWeek as { id: string }).id)
             .eq('user_id', user.id)
+            .or('session_inventory_id.not.is.null,is_completed.eq.true')
             .order('scheduled_date', { ascending: true })
 
         sessionPool = (workouts ?? []) as WorkoutWithSets[]
@@ -567,6 +571,7 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
                 `)
                 .in('microcycle_id', microcycleIds)
                 .eq('user_id', user.id)
+                .or('session_inventory_id.not.is.null,is_completed.eq.true')
                 .order('scheduled_date', { ascending: true })
 
             allWorkouts = (allWk ?? []) as WorkoutWithSets[]

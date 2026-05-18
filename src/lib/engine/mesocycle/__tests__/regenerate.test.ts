@@ -48,6 +48,29 @@ vi.mock('@/lib/supabase/server', () => ({
                     })),
                 }
             }
+            if (table === 'workouts') {
+                return {
+                    select: vi.fn(() => ({
+                        eq: vi.fn(() => ({
+                            eq: vi.fn(() => ({
+                                eq: vi.fn(async () => ({ data: [], error: null })),
+                            })),
+                        })),
+                    })),
+                    delete: vi.fn(() => ({
+                        in: vi.fn(() => ({
+                            eq: vi.fn(async () => ({ error: null })),
+                        })),
+                    })),
+                }
+            }
+            if (table === 'exercise_sets' || table === 'cardio_logs') {
+                return {
+                    delete: vi.fn(() => ({
+                        in: vi.fn(async () => ({ error: null })),
+                    })),
+                }
+            }
             return {}
         }),
     })),
