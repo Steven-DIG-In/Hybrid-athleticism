@@ -18,7 +18,8 @@ export async function getAthleteState(userId: string): Promise<AthleteState> {
   ])
 
   if (profileRes.error || !profileRes.data) throw new Error('Could not load athlete profile')
-  const p = profileRes.data as Record<string, any>
+  if (injuriesRes.error) throw new Error('Could not load athlete injuries')
+  const p = profileRes.data as Record<string, any> // TODO: remove cast once DB types are regenerated
 
   return {
     identity: {

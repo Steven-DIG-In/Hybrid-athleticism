@@ -17,7 +17,10 @@ export async function getReadiness(
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
-  if (error) throw error
+  if (error) {
+    console.error('[getReadiness] self-report query failed, degrading to UNKNOWN', error)
+    return { status: 'UNKNOWN' }
+  }
 
   const latest = (data ?? [])[0]
   if (!latest) return { status: 'UNKNOWN' }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const { selfReportRows } = vi.hoisted(() => ({ selfReportRows: [] as any[] }))
+const { selfReportRows, errorValue } = vi.hoisted(() => ({ selfReportRows: [] as any[], errorValue: { current: null as any } }))
 
 vi.mock('@/lib/supabase/server', () => {
   const client = {
@@ -10,7 +10,7 @@ vi.mock('@/lib/supabase/server', () => {
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
             order: vi.fn(() => ({
-              limit: vi.fn(async () => ({ data: selfReportRows, error: null })),
+              limit: vi.fn(async () => ({ data: selfReportRows, error: errorValue.current })),
             })),
           })),
         })),
@@ -23,7 +23,7 @@ vi.mock('@/lib/supabase/server', () => {
 import { getReadiness } from '../readiness'
 
 describe('getReadiness', () => {
-  beforeEach(() => { selfReportRows.length = 0; vi.clearAllMocks() })
+  beforeEach(() => { selfReportRows.length = 0; errorValue.current = null; vi.clearAllMocks() })
 
   it('returns UNKNOWN when there is no self-report data', async () => {
     const r = await getReadiness('u1')
@@ -36,5 +36,11 @@ describe('getReadiness', () => {
     expect(['GREEN', 'YELLOW', 'RED']).toContain((r as any).status)
     expect((r as any).score).toBeGreaterThanOrEqual(0)
     expect((r as any).score).toBeLessThanOrEqual(1)
+  })
+
+  it('degrades to UNKNOWN when the self-report query errors', async () => {
+    errorValue.current = { message: 'db down' }
+    const r = await getReadiness('u1')
+    expect(r).toEqual({ status: 'UNKNOWN' })
   })
 })
