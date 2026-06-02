@@ -150,5 +150,28 @@ intentionally **left in place** until the Strength/Endurance domain layers (Laye
 
 **Layer 1 status (2026-06-02):** 11 implementation tasks complete on branch
 `rebuild/core-architecture`; 331 unit tests pass (the only failing suite, `garmin-sync`, is a
-pre-existing missing-dependency issue unrelated to this work). Remaining: apply migrations
-021 + 022 to the live database and regenerate types (Layer 1 plan, Task 12).
+pre-existing missing-dependency issue unrelated to this work). Migrations 021 + 022 applied to
+the live database and verified (split-brain resolved). Type regen deferred (surgical add — see
+above).
+
+### Layer 2 (Strength Domain) deferrals — added 2026-06-02
+
+Layer 2 shipped the immutable `ResistancePrescription` model (`src/core/domains/strength/`),
+wired strength `5/3/1` generation to `athleteState.capabilities.strength` (benchmark fallback),
+removed the target-overwrite leak (`updateExerciseSetTargets` + dead `logExerciseSet` deleted;
+`exercise_sets.target_*` is now write-once), and added a plan-vs-actual delta readout +
+progression-feedback helper. Carried forward:
+- `resolveTrainingMaxForExercise()` + `deduplicateBenchmarks()` removal is now **unblocked for the
+  4 main lifts** (strength reads capabilities) but both remain as the *no-capability fallback*
+  (accessories, and lifts with no capability row). Full removal waits until accessory capabilities
+  and Endurance (Layer 3) also read the canonical store.
+- Auto-applying `nextSetRecommendation` into next-session prescriptions is **deferred to the
+  Coordinator (Layer 6)** — Layer 2 surfaces it as feedback only.
+- The execution-record table split (separating `actual_*` from `target_*` physically) and the
+  polished plan-vs-actual feedback surface remain **Layer 4 (Execution)**.
+
+**Layer 2 status (2026-06-02):** 10 implementation tasks complete on `rebuild/core-architecture`;
+345 unit tests pass (same lone pre-existing `garmin-sync` dep failure). **Pending:** live
+screenshot verification of the two `WorkoutLogger.tsx` changes (removed "Save Changes"/read-only
+prescription display; per-set delta readout) — static checks (tsc + full read-through review)
+pass, but the visual behaviour on the live workout screen needs an eyeball.
