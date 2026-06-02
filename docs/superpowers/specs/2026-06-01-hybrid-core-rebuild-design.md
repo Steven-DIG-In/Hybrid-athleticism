@@ -127,3 +127,23 @@ Hypertrophy, Conditioning, Mobility are folded in as additional domain modules o
 - Exact column/table split for execution vs prescription in `exercise_sets` (Layer 4 spec).
 - Whether `session_inventory` is retired outright or retained in reduced form (Layer 6 spec).
 - Migration mechanics for moving each existing screen onto the new core (per-layer).
+
+## 11. Deferred cleanups (carried forward to later layers)
+
+Layer 1 (Athlete & State) shipped the canonical `athlete_capabilities` store and the
+`getAthleteState` read model behind the `buildAthleteContext` seam. The following are
+intentionally **left in place** until the Strength/Endurance domain layers (Layer 2/3) read
+`athleteState.capabilities` directly, then removed:
+- `deduplicateBenchmarks()` (`src/lib/engine/mesocycle/context.ts`) — the old read-time
+  recency-dedup; superseded by the canonical store.
+- `resolveTrainingMaxForExercise()` (`src/lib/training/methodology-helpers.ts`) — old scattered
+  current-max resolution.
+- `AthleteContextPacket.benchmarks` — kept until no consumer reads it.
+- `Record<string, any>` row casts in `capabilities.actions.ts` and `get-athlete-state.ts` —
+  replace with generated DB row types once `database.types.ts` is regenerated with
+  `athlete_capabilities` (Task 12 of the Layer 1 plan).
+
+**Layer 1 status (2026-06-02):** 11 implementation tasks complete on branch
+`rebuild/core-architecture`; 331 unit tests pass (the only failing suite, `garmin-sync`, is a
+pre-existing missing-dependency issue unrelated to this work). Remaining: apply migrations
+021 + 022 to the live database and regenerate types (Layer 1 plan, Task 12).
