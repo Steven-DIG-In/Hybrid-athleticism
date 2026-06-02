@@ -77,7 +77,8 @@ export async function generateMesocycleProgram(
         ctx.benchmarks,
         1,
         ctx.totalWeeks,
-        ctx.isDeload
+        ctx.isDeload,
+        ctx.athleteState?.capabilities.strength ?? [],
     )
 
     // Build methodology context for the Endurance Coach
