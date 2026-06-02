@@ -17,6 +17,7 @@ import { CoachNotesBanner } from "@/components/workout/CoachNotesBanner"
 import type { WorkoutWithSets } from "@/lib/types/training.types"
 import type { ExerciseSet } from "@/lib/types/database.types"
 import { estimate1RM } from "@/lib/training/methodology-helpers"
+import { computeSetDelta } from "@/core/domains/strength/plan-vs-actual"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1478,6 +1479,31 @@ export function WorkoutLogger({
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Plan-vs-actual delta (completed sets only) */}
+                                {isCompleted && (() => {
+                                    const delta = computeSetDelta(
+                                        { targetWeightKg: set.target_weight_kg, targetReps: set.target_reps ?? 0, targetRir: set.target_rir ?? 0 },
+                                        { actualWeightKg: set.actual_weight_kg, actualReps: set.actual_reps, rirActual: set.rir_actual },
+                                    )
+                                    if (delta.status === 'unlogged') return null
+                                    const tone =
+                                        delta.status === 'over' ? 'text-green-400'
+                                            : delta.status === 'under' ? 'text-amber-400'
+                                                : 'text-neutral-500'
+                                    const parts: string[] = []
+                                    if (delta.weightKg !== null && delta.weightKg !== 0) {
+                                        parts.push(`${delta.weightKg > 0 ? '+' : ''}${delta.weightKg} kg`)
+                                    }
+                                    if (delta.reps !== null && delta.reps !== 0) {
+                                        parts.push(`${delta.reps > 0 ? '+' : ''}${delta.reps} rep${Math.abs(delta.reps) === 1 ? '' : 's'}`)
+                                    }
+                                    return (
+                                        <div className={`text-[10px] font-mono tracking-widest uppercase ${tone}`}>
+                                            {parts.length > 0 ? `vs plan: ${parts.join(' · ')}` : 'On target'}
+                                        </div>
+                                    )
+                                })()}
 
                                 {/* RIR Tactile Slider */}
                                 {!isCompleted && (
