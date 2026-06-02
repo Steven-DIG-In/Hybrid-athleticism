@@ -26,6 +26,7 @@ import type { PendingPlannerNotes } from '@/lib/types/pending-planner-notes.type
 import type { MethodologyContext } from '@/lib/ai/prompts/programming'
 import type { EnduranceMethodologyContext } from '@/lib/ai/prompts/endurance-coach'
 import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
+import { getAthleteState } from '@/lib/athlete/get-athlete-state'
 import {
     calculate531Wave,
     resolveTrainingMaxForExercise,
@@ -156,6 +157,9 @@ export async function buildAthleteContext(
     const pendingPlannerNotes =
         (profileNotesResult.data?.pending_planner_notes as PendingPlannerNotes) ?? null
 
+    // Layer 1 canonical state (additive seam — consumers migrate onto this).
+    const athleteState = await getAthleteState(userId)
+
     const ctx: AthleteContextPacket = {
         profile,
         coachingTeam,
@@ -170,6 +174,7 @@ export async function buildAthleteContext(
         targetRir: microcycle?.target_rir ?? null,
         latestBlockRetrospective,
         pendingPlannerNotes,
+        athleteState,
     }
 
     // Load previous week data if requested

@@ -77,6 +77,15 @@ vi.mock('@/lib/supabase/server', () => {
     }
 })
 
+vi.mock('@/lib/athlete/get-athlete-state', () => ({
+  getAthleteState: vi.fn(async () => ({
+    identity: { age: 34, sex: 'MALE', bodyweightKg: 82, goalArchetype: 'hybrid_fitness', primaryGoal: null, experienceByModality: {} },
+    constraints: { injuries: [], movementsToAvoid: [], equipmentList: [], environment: null, availableDays: null, sessionDurationMinutes: null },
+    capabilities: { strength: [{ key: 'back_squat', label: 'Back Squat', currentValueKg: 120, source: 'onboarding', updatedAt: 't', evidence: {} }], endurance: [] },
+    readiness: { status: 'UNKNOWN' },
+  })),
+}))
+
 import { buildAthleteContext } from '@/lib/engine/mesocycle/context'
 
 describe('buildAthleteContext — carryover extension', () => {
@@ -128,5 +137,13 @@ describe('buildAthleteContext — carryover extension', () => {
         expect(r.success).toBe(true)
         expect(r.success && r.data.latestBlockRetrospective).toBeNull()
         expect(r.success && r.data.pendingPlannerNotes).toBeNull()
+    })
+
+    it('attaches canonical athleteState to the packet', async () => {
+        const result = await buildAthleteContext('user-1', 'meso-1', 1)
+        expect(result.success).toBe(true)
+        if (result.success) {
+            expect(result.data.athleteState?.capabilities.strength[0].currentValueKg).toBe(120)
+        }
     })
 })
