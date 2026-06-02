@@ -1,5 +1,5 @@
 // The single entry point for Layer 1. Assembles the canonical AthleteState snapshot
-// consumed identically by generation and execution. Pure helper (no 'use server') so it
+// consumed identically by generation and execution. Pure helper so it
 // can be imported by both the engine and server actions.
 
 import { createClient } from '@/lib/supabase/server'

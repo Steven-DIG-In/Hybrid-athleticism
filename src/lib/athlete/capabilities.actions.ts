@@ -1,5 +1,3 @@
-'use server'
-
 // The single writer + reader for the canonical athlete_capabilities store.
 // recordCapability() is the ONLY path that mutates the table; benchmark + recalibration
 // flows call it as a write-through. Unknown names are skipped (logged), never dropped silently.

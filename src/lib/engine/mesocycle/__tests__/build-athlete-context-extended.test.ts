@@ -87,6 +87,7 @@ vi.mock('@/lib/athlete/get-athlete-state', () => ({
 }))
 
 import { buildAthleteContext } from '@/lib/engine/mesocycle/context'
+import { getAthleteState } from '@/lib/athlete/get-athlete-state'
 
 describe('buildAthleteContext — carryover extension', () => {
     beforeEach(() => {
@@ -144,6 +145,18 @@ describe('buildAthleteContext — carryover extension', () => {
         expect(result.success).toBe(true)
         if (result.success) {
             expect(result.data.athleteState?.capabilities.strength[0].currentValueKg).toBe(120)
+        }
+    })
+
+    it('degrades gracefully when getAthleteState fails', async () => {
+        ;(getAthleteState as unknown as { mockRejectedValueOnce: (v: unknown) => void }).mockRejectedValueOnce(
+            new Error('athlete_capabilities missing')
+        )
+        const result = await buildAthleteContext('user-1', 'meso-1', 1)
+        expect(result.success).toBe(true)
+        if (result.success) {
+            expect(result.data.athleteState).toBeUndefined()
+            expect(result.data.profile).toBeDefined()
         }
     })
 })

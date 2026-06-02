@@ -158,7 +158,13 @@ export async function buildAthleteContext(
         (profileNotesResult.data?.pending_planner_notes as PendingPlannerNotes) ?? null
 
     // Layer 1 canonical state (additive seam — consumers migrate onto this).
-    const athleteState = await getAthleteState(userId)
+    // Degradable: athleteState is an optional packet field. If the underlying
+    // athlete_capabilities table is not yet present (migration applies later),
+    // degrade to undefined instead of failing the whole generation path.
+    const athleteState = await getAthleteState(userId).catch((err) => {
+        console.warn('[buildAthleteContext] athleteState unavailable, degrading gracefully:', err)
+        return undefined
+    })
 
     const ctx: AthleteContextPacket = {
         profile,
