@@ -168,44 +168,9 @@ export async function updateExerciseSet(
     return { success: true, data: updatedSet }
 }
 
-// ─── Update Exercise Set Targets ─────────────────────────────────────────────
-
-/**
- * Update the target values on a pre-scaffolded exercise set.
- * Used when the athlete adjusts AI estimates before starting a workout.
- */
-export async function updateExerciseSetTargets(
-    setId: string,
-    targets: { targetWeightKg?: number; targetReps?: number; targetRir?: number }
-): Promise<ActionResult<ExerciseSet>> {
-    const supabase = await createClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-        return { success: false, error: 'Not authenticated' }
-    }
-
-    const updatePayload: Record<string, unknown> = {}
-    if (targets.targetWeightKg !== undefined) updatePayload.target_weight_kg = targets.targetWeightKg
-    if (targets.targetReps !== undefined) updatePayload.target_reps = targets.targetReps
-    if (targets.targetRir !== undefined) updatePayload.target_rir = targets.targetRir
-
-    const { data: updatedSet, error } = await supabase
-        .from('exercise_sets')
-        .update(updatePayload)
-        .eq('id', setId)
-        .eq('user_id', user.id)
-        .select()
-        .single()
-
-    if (error) {
-        console.error('[updateExerciseSetTargets]', error)
-        return { success: false, error: error.message }
-    }
-
-    revalidatePath('/workout')
-    return { success: true, data: updatedSet }
-}
+// NOTE (Layer 2): exercise_sets.target_* columns are WRITE-ONCE — owned by generation
+// (insertLiftingSets). The execution surface must never write targets; in-session edits
+// are recorded as actuals (actual_weight_kg / actual_reps / rir_actual / rpe_actual).
 
 // ─── Cardio Session Logging ───────────────────────────────────────────────────
 

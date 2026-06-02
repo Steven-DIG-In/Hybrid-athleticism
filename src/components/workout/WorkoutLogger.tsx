@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { completeWorkout, swapExercise, getExerciseHistory } from "@/lib/actions/workout.actions"
 import type { ConditioningResultInput } from "@/lib/actions/workout.actions"
-import { updateExerciseSet, updateExerciseSetTargets, logCardioSession } from "@/lib/actions/logging.actions"
+import { updateExerciseSet, logCardioSession } from "@/lib/actions/logging.actions"
 import { RestTimer, suggestRestSeconds } from "@/components/workout/RestTimer"
 import { ExerciseHistoryPanel } from "@/components/workout/ExerciseHistoryPanel"
 import { CoachNotesBanner } from "@/components/workout/CoachNotesBanner"
@@ -684,8 +684,6 @@ export function WorkoutLogger({
 
     // Pre-flight: expanded exercise for target editing (#8, #18)
     const [expandedExercise, setExpandedExercise] = useState<string | null>(null)
-    const [targetEdits, setTargetEdits] = useState<Record<string, { weight: string; reps: string }>>({})
-    const [workingMaxEdits, setWorkingMaxEdits] = useState<Record<string, string>>({})
 
     // Group sets by exercise name to create the pagination flow
     const exerciseNames = Array.from(new Set(workout.exercise_sets.map(s => s.exercise_name)))
@@ -939,46 +937,6 @@ export function WorkoutLogger({
         })
     }, [swapTarget, workout.id, router, startTransition])
 
-    // ─── Save Adjusted Targets (#8, #18) ──────────────────────────────────────
-
-    const handleSaveTargets = useCallback(async (exerciseName: string) => {
-        const sets = workout.exercise_sets.filter(s => s.exercise_name === exerciseName)
-        const edits = sets
-            .filter(s => targetEdits[s.id])
-            .map(s => ({ setId: s.id, ...targetEdits[s.id] }))
-
-        if (edits.length === 0) {
-            setExpandedExercise(null)
-            return
-        }
-
-        startTransition(async () => {
-            try {
-                for (const edit of edits) {
-                    const targets: { targetWeightKg?: number; targetReps?: number } = {}
-                    const w = parseFloat(edit.weight)
-                    const r = parseInt(edit.reps)
-                    if (!isNaN(w) && w >= 0) targets.targetWeightKg = w
-                    if (!isNaN(r) && r > 0) targets.targetReps = r
-
-                    if (Object.keys(targets).length > 0) {
-                        const result = await updateExerciseSetTargets(edit.setId, targets)
-                        if (!result.success) {
-                            setError(result.error ?? "Failed to save targets.")
-                            return
-                        }
-                    }
-                }
-                setExpandedExercise(null)
-                setTargetEdits({})
-                router.refresh()
-            } catch (err) {
-                console.error("[handleSaveTargets]", err)
-                setError("Network error saving targets. Try again.")
-            }
-        })
-    }, [workout.exercise_sets, targetEdits, router, startTransition])
-
     // ─── End Workout (Issue #26 — end early or complete) ────────────────────
 
     const handleEndWorkout = useCallback(() => {
@@ -1138,117 +1096,22 @@ export function WorkoutLogger({
                                         </div>
                                     )}
 
-                                    {/* Expanded: editable targets per set (#8, #18) */}
+                                    {/* Expanded: prescription is read-only (target_* write-once, owned by generation) */}
                                     {isExpanded && (
                                         <div className="mt-3 space-y-2 border-t border-[#1a1a1a] pt-3">
-                                            {/* Working Max Editor */}
-                                            {(() => {
-                                                const weights = sets
-                                                    .map(s => s.target_weight_kg)
-                                                    .filter((w): w is number => w !== null && w > 0)
-                                                const currentWorkingMax = weights.length > 0 ? Math.max(...weights) : 0
-                                                const workingMaxValue = workingMaxEdits[name] ?? currentWorkingMax.toString()
-
-                                                return currentWorkingMax > 0 && !isBodyweightExercise(name) ? (
-                                                    <div className="p-4 bg-cyan-950/20 border border-cyan-900/30 rounded-md mb-4">
-                                                        <label className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 block mb-2">
-                                                            Working Max (all sets will adjust proportionally)
-                                                        </label>
-                                                        <div className="flex items-center gap-3">
-                                                            <input
-                                                                type="number"
-                                                                inputMode="decimal"
-                                                                step="2.5"
-                                                                value={workingMaxValue}
-                                                                onChange={(e) => {
-                                                                    const newMax = parseFloat(e.target.value) || 0
-                                                                    setWorkingMaxEdits(prev => ({ ...prev, [name]: e.target.value }))
-
-                                                                    if (newMax > 0 && currentWorkingMax > 0) {
-                                                                        // Calculate ratio and update all sets
-                                                                        const ratio = newMax / currentWorkingMax
-                                                                        const updates: Record<string, { weight: string; reps: string }> = {}
-
-                                                                        sets.forEach(set => {
-                                                                            if (set.target_weight_kg && set.target_weight_kg > 0) {
-                                                                                const newWeight = Math.round(set.target_weight_kg * ratio * 2) / 2 // Round to nearest 2.5kg
-                                                                                updates[set.id] = {
-                                                                                    weight: newWeight.toString(),
-                                                                                    reps: set.target_reps?.toString() ?? ""
-                                                                                }
-                                                                            }
-                                                                        })
-
-                                                                        setTargetEdits(prev => ({ ...prev, ...updates }))
-                                                                    }
-                                                                }}
-                                                                className="flex-1 bg-[#111] border border-cyan-900/50 h-12 px-3 text-center text-xl font-space-grotesk text-white focus:border-cyan-500 focus:outline-none"
-                                                            />
-                                                            <span className="text-sm font-mono text-neutral-400">kg</span>
-                                                            <div className="text-right min-w-[80px]">
-                                                                <span className="text-[8px] font-mono text-neutral-500 uppercase block">Est. 1RM</span>
-                                                                <span className="text-sm font-space-grotesk font-semibold text-neutral-400">
-                                                                    {estimate1RM(parseFloat(workingMaxValue) || currentWorkingMax, 5)}kg
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ) : null
-                                            })()}
-
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <span className="text-[9px] font-mono text-yellow-500/70 uppercase tracking-widest">
-                                                    AI Estimates — adjust if needed
-                                                </span>
-                                            </div>
-
-                                            {sets.map(set => {
-                                                const edit = targetEdits[set.id]
-                                                const weightVal = edit?.weight ?? set.target_weight_kg?.toString() ?? ""
-                                                const repsVal = edit?.reps ?? set.target_reps?.toString() ?? ""
-
-                                                return (
-                                                    <div key={set.id} className="flex items-center gap-3">
-                                                        <span className="w-6 text-xs font-mono text-neutral-600 text-center">
-                                                            S{set.set_number}
-                                                        </span>
-                                                        <div className="relative flex-1">
-                                                            <span className="absolute top-0.5 left-2 text-[7px] font-mono text-neutral-600">KG</span>
-                                                            <input
-                                                                type="number"
-                                                                inputMode="decimal"
-                                                                value={weightVal}
-                                                                onChange={(e) => setTargetEdits(prev => ({
-                                                                    ...prev,
-                                                                    [set.id]: {
-                                                                        weight: e.target.value,
-                                                                        reps: prev[set.id]?.reps ?? repsVal,
-                                                                    }
-                                                                }))}
-                                                                className="w-full bg-[#111111] border border-[#2a2a2a] h-9 text-center text-sm font-space-grotesk focus:border-yellow-500/50 focus:outline-none"
-                                                                disabled={isPending}
-                                                            />
-                                                        </div>
-                                                        <div className="relative flex-1">
-                                                            <span className="absolute top-0.5 left-2 text-[7px] font-mono text-neutral-600">REPS</span>
-                                                            <input
-                                                                type="number"
-                                                                inputMode="numeric"
-                                                                value={repsVal}
-                                                                onChange={(e) => setTargetEdits(prev => ({
-                                                                    ...prev,
-                                                                    [set.id]: {
-                                                                        weight: prev[set.id]?.weight ?? weightVal,
-                                                                        reps: e.target.value,
-                                                                    }
-                                                                }))}
-                                                                className="w-full bg-[#111111] border border-[#2a2a2a] h-9 text-center text-sm font-space-grotesk focus:border-yellow-500/50 focus:outline-none"
-                                                                disabled={isPending}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
+                                            {sets.map(set => (
+                                                <div key={set.id} className="flex items-center gap-3">
+                                                    <span className="w-6 text-xs font-mono text-neutral-600 text-center">
+                                                        S{set.set_number}
+                                                    </span>
+                                                    <span className="flex-1 text-sm font-space-grotesk text-neutral-300">
+                                                        {set.target_weight_kg ? `${set.target_weight_kg}kg` : "—"}
+                                                    </span>
+                                                    <span className="flex-1 text-sm font-space-grotesk text-neutral-300">
+                                                        {set.target_reps ? `${set.target_reps} reps` : "—"}
+                                                    </span>
+                                                </div>
+                                            ))}
 
                                             <div className="flex gap-2 mt-2">
                                                 <Button
@@ -1262,18 +1125,6 @@ export function WorkoutLogger({
                                                     <RefreshCw className="w-3 h-3 mr-1.5" />
                                                     Swap Exercise
                                                 </Button>
-                                                {Object.keys(targetEdits).some(id =>
-                                                    sets.some(s => s.id === id)
-                                                ) && (
-                                                    <Button
-                                                        size="sm"
-                                                        className="flex-1 text-xs"
-                                                        onClick={() => handleSaveTargets(name)}
-                                                        disabled={isPending}
-                                                    >
-                                                        {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save Changes"}
-                                                    </Button>
-                                                )}
                                             </div>
                                         </div>
                                     )}
