@@ -13,6 +13,8 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
+import { trainingMaxFromCapability } from '@/core/domains/strength/training-max'
+import type { StrengthCapability } from '@/lib/types/athlete-state.types'
 import type { ActionResult, WorkoutWithSets } from '@/lib/types/training.types'
 import type { AthleteBenchmark } from '@/lib/types/database.types'
 import type {
@@ -26,6 +28,7 @@ import type { PendingPlannerNotes } from '@/lib/types/pending-planner-notes.type
 import type { MethodologyContext } from '@/lib/ai/prompts/programming'
 import type { EnduranceMethodologyContext } from '@/lib/ai/prompts/endurance-coach'
 import { computeWeeklyLoadSummary } from '@/lib/scheduling/load-scoring'
+import { getAthleteState } from '@/lib/athlete/get-athlete-state'
 import {
     calculate531Wave,
     resolveTrainingMaxForExercise,
@@ -156,6 +159,15 @@ export async function buildAthleteContext(
     const pendingPlannerNotes =
         (profileNotesResult.data?.pending_planner_notes as PendingPlannerNotes) ?? null
 
+    // Layer 1 canonical state (additive seam — consumers migrate onto this).
+    // Degradable: athleteState is an optional packet field. If the underlying
+    // athlete_capabilities table is not yet present (migration applies later),
+    // degrade to undefined instead of failing the whole generation path.
+    const athleteState = await getAthleteState(userId).catch((err) => {
+        console.warn('[buildAthleteContext] athleteState unavailable, degrading gracefully:', err)
+        return undefined
+    })
+
     const ctx: AthleteContextPacket = {
         profile,
         coachingTeam,
@@ -170,6 +182,7 @@ export async function buildAthleteContext(
         targetRir: microcycle?.target_rir ?? null,
         latestBlockRetrospective,
         pendingPlannerNotes,
+        athleteState,
     }
 
     // Load previous week data if requested
@@ -334,7 +347,8 @@ export async function buildStrengthMethodologyContext(
     benchmarks: AthleteBenchmark[],
     weekNumber: number,
     totalWeeks: number,
-    isDeload: boolean
+    isDeload: boolean,
+    capabilities: StrengthCapability[] = [],
 ): Promise<MethodologyContext | undefined> {
     const ctx: MethodologyContext = {}
     const strengthMethod = profile.strength_methodology ?? 'ai_decides'
@@ -343,19 +357,25 @@ export async function buildStrengthMethodologyContext(
     // 5/3/1 Protocol
     if (strengthMethod === '531') {
         const weekInCycle = ((weekNumber - 1) % 4) + 1
-        const liftMap: Array<[string, string[]]> = [
-            ['Squat', ['squat', 'back_squat']],
-            ['Bench Press', ['bench', 'bench_press']],
-            ['Deadlift', ['deadlift']],
-            ['OHP', ['ohp', 'overhead_press', 'overhead']],
+        const liftMap: Array<[string, string, string[]]> = [
+            ['Squat', 'back_squat', ['squat', 'back_squat']],
+            ['Bench Press', 'bench_press', ['bench', 'bench_press']],
+            ['Deadlift', 'deadlift', ['deadlift']],
+            ['OHP', 'overhead_press', ['ohp', 'overhead_press', 'overhead']],
         ]
         const lines: string[] = []
-        for (const [displayName, keywords] of liftMap) {
-            const bm = benchmarks.find(b =>
-                keywords.some(kw => b.benchmark_name.toLowerCase().includes(kw))
-            )
-            if (bm) {
-                const tm = await resolveTrainingMaxForExercise(displayName, bm.value, 1)
+        for (const [displayName, capKey, keywords] of liftMap) {
+            const cap = capabilities.find(c => c.key === capKey)
+            let tm: number | null = null
+            if (cap) {
+                tm = trainingMaxFromCapability(cap)
+            } else {
+                const bm = benchmarks.find(b =>
+                    keywords.some(kw => b.benchmark_name.toLowerCase().includes(kw))
+                )
+                if (bm) tm = await resolveTrainingMaxForExercise(displayName, bm.value, 1)
+            }
+            if (tm !== null) {
                 const wave = calculate531Wave(tm, weekInCycle)
                 const setsStr = wave.sets.map(s =>
                     `${s.reps}${s.isAmrap ? '+' : ''} @ ${s.weightKg}kg (${Math.round(s.percentTM * 100)}%TM)`

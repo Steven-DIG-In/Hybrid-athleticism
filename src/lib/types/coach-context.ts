@@ -62,6 +62,9 @@ export interface AthleteContextPacket {
     // Carryover from prior block (Block N+1 wizard)
     latestBlockRetrospective?: BlockRetrospectiveSnapshot | null
     pendingPlannerNotes?: PendingPlannerNotes | null
+
+    // Layer 1 canonical state (additive seam — consumers migrate onto this).
+    athleteState?: import('./athlete-state.types').AthleteState
 }
 
 export interface PreviousWeekSummary {

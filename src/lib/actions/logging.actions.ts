@@ -6,89 +6,6 @@ import type { ExerciseSet, CardioLog, RuckingLog, ConditioningLog } from '@/lib/
 import { revalidatePath } from 'next/cache'
 import { calculateRPVolumeLandmarks, calculateWeeklyVolumeTarget } from '@/lib/training/methodology-helpers'
 
-// ─── Lifting Set Logging ──────────────────────────────────────────────────────
-
-export interface LogExerciseSetInput {
-    workoutId: string
-    exerciseName: string
-    muscleGroup?: string
-    setNumber: number
-    targetReps?: number
-    targetWeightKg?: number
-    targetRir?: number
-    actualReps: number
-    actualWeightKg: number
-    rirActual?: number
-    rpeActual?: number
-    notes?: string
-    isPR?: boolean
-}
-
-/**
- * Log an individual exercise set during a lifting or MetCon workout.
- * Flags personal records and calculates tonnage on the client.
- */
-export async function logExerciseSet(
-    input: LogExerciseSetInput
-): Promise<ActionResult<ExerciseSet>> {
-    const supabase = await createClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-        return { success: false, error: 'Not authenticated' }
-    }
-
-    // Determine if this is a PR (heaviest single set for this exercise)
-    let isPR = input.isPR ?? false
-    if (!isPR) {
-        const { data: prCheck } = await supabase
-            .from('exercise_sets')
-            .select('actual_weight_kg, actual_reps')
-            .eq('user_id', user.id)
-            .eq('exercise_name', input.exerciseName)
-            .not('actual_weight_kg', 'is', null)
-            .order('actual_weight_kg', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-        if (prCheck) {
-            isPR = input.actualWeightKg > (prCheck.actual_weight_kg ?? 0)
-        } else {
-            isPR = true  // First logged set is always a PR
-        }
-    }
-
-    const { data: exerciseSet, error } = await supabase
-        .from('exercise_sets')
-        .insert({
-            workout_id: input.workoutId,
-            user_id: user.id,
-            exercise_name: input.exerciseName,
-            muscle_group: input.muscleGroup ?? null,
-            set_number: input.setNumber,
-            target_reps: input.targetReps ?? null,
-            target_weight_kg: input.targetWeightKg ?? null,
-            target_rir: input.targetRir ?? null,
-            actual_reps: input.actualReps,
-            actual_weight_kg: input.actualWeightKg,
-            rir_actual: input.rirActual ?? null,
-            rpe_actual: input.rpeActual ?? null,
-            notes: input.notes ?? null,
-            is_pr: isPR,
-            logged_at: new Date().toISOString(),
-        })
-        .select()
-        .single()
-
-    if (error) {
-        console.error('[logExerciseSet]', error)
-        return { success: false, error: error.message }
-    }
-
-    revalidatePath('/workout')
-    return { success: true, data: exerciseSet }
-}
-
 // ─── Update Pre-Scaffolded Set ───────────────────────────────────────────────
 
 export interface UpdateExerciseSetInput {
@@ -168,44 +85,9 @@ export async function updateExerciseSet(
     return { success: true, data: updatedSet }
 }
 
-// ─── Update Exercise Set Targets ─────────────────────────────────────────────
-
-/**
- * Update the target values on a pre-scaffolded exercise set.
- * Used when the athlete adjusts AI estimates before starting a workout.
- */
-export async function updateExerciseSetTargets(
-    setId: string,
-    targets: { targetWeightKg?: number; targetReps?: number; targetRir?: number }
-): Promise<ActionResult<ExerciseSet>> {
-    const supabase = await createClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-        return { success: false, error: 'Not authenticated' }
-    }
-
-    const updatePayload: Record<string, unknown> = {}
-    if (targets.targetWeightKg !== undefined) updatePayload.target_weight_kg = targets.targetWeightKg
-    if (targets.targetReps !== undefined) updatePayload.target_reps = targets.targetReps
-    if (targets.targetRir !== undefined) updatePayload.target_rir = targets.targetRir
-
-    const { data: updatedSet, error } = await supabase
-        .from('exercise_sets')
-        .update(updatePayload)
-        .eq('id', setId)
-        .eq('user_id', user.id)
-        .select()
-        .single()
-
-    if (error) {
-        console.error('[updateExerciseSetTargets]', error)
-        return { success: false, error: error.message }
-    }
-
-    revalidatePath('/workout')
-    return { success: true, data: updatedSet }
-}
+// NOTE (Layer 2): exercise_sets.target_* columns are WRITE-ONCE — owned by generation
+// (insertLiftingSets). The execution surface must never write targets; in-session edits
+// are recorded as actuals (actual_weight_kg / actual_reps / rir_actual / rpe_actual).
 
 // ─── Cardio Session Logging ───────────────────────────────────────────────────
 

@@ -12,6 +12,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
+import { recordCapability } from '@/lib/athlete/capabilities.actions'
 
 export type TrainingMaxSource = 'onboarding' | 'recalibration' | 'intervention_response'
 
@@ -69,6 +70,19 @@ export async function setTrainingMax(input: SetTrainingMaxInput): Promise<Traini
         .update({ training_maxes: next })
         .eq('id', user.id)
     if (writeErr) throw writeErr
+
+    // Write-through to the canonical capability store. intervention_response maps to
+    // recalibration. Failures must not break the training-max write.
+    try {
+        await recordCapability({
+            name: input.exercise,
+            value: entry.trainingMaxKg,
+            source: input.source === 'intervention_response' ? 'recalibration' : input.source,
+            evidence: { from: 'training_max', source: input.source },
+        })
+    } catch (err) {
+        console.error('[setTrainingMax] capability write-through failed', err)
+    }
 
     return entry
 }

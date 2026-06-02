@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { recordCapability } from '@/lib/athlete/capabilities.actions'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult, OnboardingInjury, OnboardingBenchmark, OnboardingRecentTraining } from '@/lib/types/training.types'
 import type {
@@ -285,6 +286,22 @@ export async function saveBenchmarks(
     if (error) {
         console.error('[saveBenchmarks]', error)
         return { success: false, error: error.message }
+    }
+
+    // Write-through: seed canonical capabilities from onboarding benchmarks.
+    // Unknown names are skipped inside recordCapability; each call is isolated
+    // so a failure can't break onboarding.
+    for (const b of data ?? []) {
+        try {
+            await recordCapability({
+                name: b.benchmark_name,
+                value: Number(b.value),
+                source: 'onboarding',
+                evidence: { from: 'onboarding_benchmark' },
+            })
+        } catch (err) {
+            console.error('[onboarding] capability write-through failed', err)
+        }
     }
 
     return { success: true, data: data ?? [] }
