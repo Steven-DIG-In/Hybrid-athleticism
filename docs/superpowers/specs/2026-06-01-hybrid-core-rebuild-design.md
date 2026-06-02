@@ -140,8 +140,13 @@ intentionally **left in place** until the Strength/Endurance domain layers (Laye
   current-max resolution.
 - `AthleteContextPacket.benchmarks` — kept until no consumer reads it.
 - `Record<string, any>` row casts in `capabilities.actions.ts` and `get-athlete-state.ts` —
-  replace with generated DB row types once `database.types.ts` is regenerated with
-  `athlete_capabilities` (Task 12 of the Layer 1 plan).
+  replace with a generated DB row type for `athlete_capabilities`. **Important:**
+  `src/lib/types/database.types.ts` is **hand-augmented** (a generated `Database` block plus a
+  hand-written `Profile` interface and `Tables<>` aliases the codebase imports). Do **NOT** run a
+  blind `supabase gen types > database.types.ts` — it clobbers the hand-written section and breaks
+  the build. Add the `athlete_capabilities` table **surgically** to the generated `Tables` block
+  and add `export type AthleteCapability = Tables<'athlete_capabilities'>`, then swap the casts.
+  Deferred to the Layer 2 cast-cleanup.
 
 **Layer 1 status (2026-06-02):** 11 implementation tasks complete on branch
 `rebuild/core-architecture`; 331 unit tests pass (the only failing suite, `garmin-sync`, is a
