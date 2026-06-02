@@ -9,6 +9,12 @@ import { createClient } from "@/lib/supabase/server"
 import { evaluateOverrunSignal } from "@/lib/analytics/overrun-signal"
 import { OverrunSignalBanner } from "@/components/reality-check/OverrunSignalBanner"
 
+// Lazy next-week generation (generateNextWeekPool / regenerateCurrentWeekPool)
+// runs as a Server Action on this route and makes a single large Claude call
+// (~150s). Without this, the action inherits the Hobby default (60s) and is
+// killed mid-generation. Mirrors the block-creation wizard page.
+export const maxDuration = 300
+
 export default async function DashboardPage({
     searchParams,
 }: {
