@@ -4,6 +4,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { recoveryScorerSkill } from '@/lib/skills/domains/recovery/recovery-scorer'
+import { recoveryCoachConfig } from '@/lib/coaches/configs/recovery'
 import type { Readiness } from '@/lib/types/athlete-state.types'
 
 export async function getReadiness(
@@ -12,7 +13,7 @@ export async function getReadiness(
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('athlete_self_reports')
-    .select('*')
+    .select('sleep_quality, energy_level, stress_level, motivation, soreness, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -35,18 +36,7 @@ export async function getReadiness(
         motivation: latest.motivation ?? 3,
         avgSoreness: 3,
       },
-      signalWeights: {
-        rirDeviation: 0.95,
-        rpeDeviation: 0.9,
-        missedSessions: 0.9,
-        completionRate: 0.85,
-        selfReportSleep: 0.8,
-        selfReportEnergy: 0.8,
-        selfReportSoreness: 0.85,
-        selfReportStress: 0.75,
-        selfReportMotivation: 0.7,
-        earlyCompletion: 0.7,
-      },
+      signalWeights: recoveryCoachConfig.checkIn.signalWeights,
     })
 
     return {
@@ -54,7 +44,8 @@ export async function getReadiness(
       score: result.score,
       rationale: 'Derived from latest self-report.',
     }
-  } catch {
+  } catch (e) {
+    console.error('[getReadiness] recovery scorer failed:', e)
     return { status: 'UNKNOWN' }
   }
 }
