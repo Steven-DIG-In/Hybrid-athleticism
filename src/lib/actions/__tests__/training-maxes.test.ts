@@ -34,7 +34,12 @@ vi.mock('@/lib/supabase/server', () => {
     return { createClient: vi.fn(async () => client) }
 })
 
+vi.mock('@/lib/athlete/capabilities.actions', () => ({
+    recordCapability: vi.fn(async () => {}),
+}))
+
 import { getTrainingMax, setTrainingMax } from '../training-maxes.actions'
+import { recordCapability } from '@/lib/athlete/capabilities.actions'
 
 describe('training-maxes persistence', () => {
     beforeEach(() => { state.training_maxes = {}; vi.clearAllMocks() })
@@ -64,5 +69,12 @@ describe('training-maxes persistence', () => {
         const entry = await getTrainingMax('Squat')
         expect(entry?.trainingMaxKg).toBe(132)
         expect(entry?.source).toBe('recalibration')
+    })
+
+    it('setTrainingMax writes through to recordCapability', async () => {
+        await setTrainingMax({ exercise: 'Squat', trainingMaxKg: 132.5, source: 'recalibration' })
+        expect(recordCapability).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'Squat', value: 132.5, source: 'recalibration' })
+        )
     })
 })
