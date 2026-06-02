@@ -16,5 +16,6 @@ describe('buildStrengthMethodologyContext capability sourcing', () => {
     const benchmarks: any = [{ benchmark_name: 'Back Squat', value: 100, user_id: 'u', modality: 'LIFTING', unit: 'kg', source: 'self_reported', tested_at: null, created_at: 't', id: '1' }]
     const ctx = await buildStrengthMethodologyContext(profile as any, benchmarks, 1, 4, false, [])
     expect(ctx?.liftingProtocol).toContain('Squat')
+    expect(ctx?.liftingProtocol).toContain('TM:')
   })
 })
