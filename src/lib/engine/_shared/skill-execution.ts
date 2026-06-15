@@ -12,6 +12,14 @@ import type { CoachDomain } from '@/lib/skills/types'
 import type { AthleteContextPacket } from '@/lib/types/coach-context'
 import type { MesocycleStrategyValidated } from '@/lib/ai/schemas/week-brief'
 import { resolveTrainingMaxForExercise } from '@/lib/training/methodology-helpers'
+import { formatPace } from '@/lib/skills/domains/endurance/vdot-pacer'
+
+// Running benchmark keys (canonical capability) → race distance in km, for VDOT.
+const RUN_BENCHMARK_KM: Record<string, number> = {
+    run_5k: 5,
+    run_10k: 10,
+    run_1mile: 1.609,
+}
 
 /**
  * Build skill input from the available context for a given skill name.
@@ -118,16 +126,22 @@ export async function buildSkillInput(
             return undefined
         }
         case 'vdot-pacer': {
-            const enduranceBenchmarks = ctx.benchmarks.filter(b =>
+            // Prefer Layer 1's canonical endurance capability (run_5k/run_10k/run_1mile);
+            // fall back to the legacy athlete_benchmarks list. Emits raceDistanceKm — the
+            // key vdotPacerSkill actually validates (was raceDistanceMeters → always rejected).
+            const runCap = (ctx.athleteState?.capabilities.endurance ?? [])
+                .find(c => RUN_BENCHMARK_KM[c.key] !== undefined && c.currentValueSeconds > 0)
+            if (runCap) {
+                return { raceDistanceKm: RUN_BENCHMARK_KM[runCap.key], raceTimeSeconds: runCap.currentValueSeconds }
+            }
+            const best = ctx.benchmarks.find(b =>
                 ['5k', '10k', 'mile', '1_mile'].some(kw => b.benchmark_name.toLowerCase().includes(kw))
             )
-            if (enduranceBenchmarks.length === 0) return undefined
-            const best = enduranceBenchmarks[0]
+            if (!best || typeof best.value !== 'number') return undefined
+            const name = best.benchmark_name.toLowerCase()
             return {
-                raceDistanceMeters: best.benchmark_name.toLowerCase().includes('5k') ? 5000
-                    : best.benchmark_name.toLowerCase().includes('10k') ? 10000
-                    : 1609,
-                raceTimeSeconds: typeof best.value === 'number' ? best.value : undefined,
+                raceDistanceKm: name.includes('5k') ? 5 : name.includes('10k') ? 10 : 1.609,
+                raceTimeSeconds: best.value,
             }
         }
         case 'zone-distributor': {
@@ -273,15 +287,21 @@ export function buildPreComputedAddendum(preComputed: Map<string, unknown>): str
                 break
             }
             case 'vdot-pacer': {
-                const data = result as { vdot: number; paces: Record<string, number> }
-                if (data.paces) {
-                    const pacesStr = Object.entries(data.paces)
-                        .map(([zone, pace]) => `  ${zone}: ${Math.floor(pace / 60)}:${String(Math.round(pace % 60)).padStart(2, '0')}/km`)
-                        .join('\n')
-                    sections.push(
-                        `VDOT PACES (pre-computed — use these exact paces):\n  VDOT: ${data.vdot}\n${pacesStr}`
-                    )
+                // vdotPacerSkill returns flat pace fields (not a `paces` record).
+                const data = result as {
+                    vdot: number
+                    easyPaceSecPerKm: number
+                    tempoPaceSecPerKm: number
+                    thresholdPaceSecPerKm: number
+                    intervalPaceSecPerKm: number
                 }
+                sections.push(
+                    `VDOT PACES (pre-computed — use these exact paces):\n  VDOT: ${data.vdot}\n` +
+                    `  easy: ${formatPace(data.easyPaceSecPerKm)}/km\n` +
+                    `  tempo: ${formatPace(data.tempoPaceSecPerKm)}/km\n` +
+                    `  threshold: ${formatPace(data.thresholdPaceSecPerKm)}/km\n` +
+                    `  interval: ${formatPace(data.intervalPaceSecPerKm)}/km`
+                )
                 break
             }
             case 'zone-distributor': {
