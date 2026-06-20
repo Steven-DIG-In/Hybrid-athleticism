@@ -469,6 +469,16 @@ export function SessionPoolClient({ data, blockIsEmpty = false }: { data: Dashbo
 
     const currentWeekNumber = data.currentWeek?.week_number ?? 1
 
+    // The active mesocycle generates one week of session inventory at a time
+    // (lazy generation). Surface the "Generate Next Week" control when the
+    // current week has no sessions yet (e.g. the calendar has moved past the
+    // last generated week) or when every session in it is resolved. Hidden on
+    // the final week once it's done — close the block instead of generating.
+    const weekIsEmpty = totalCount === 0
+    const weekIsDone = totalCount > 0 && completedCount >= totalCount
+    const showGenerateNext = !!currentMesocycle
+        && (weekIsEmpty || (weekIsDone && currentWeekNumber < data.totalWeeks))
+
     const navigateWeek = (direction: 'prev' | 'next') => {
         const target = direction === 'prev' ? currentWeekNumber - 1 : currentWeekNumber + 1
         if (target >= 1 && target <= data.totalWeeks) {
@@ -720,6 +730,57 @@ export function SessionPoolClient({ data, blockIsEmpty = false }: { data: Dashbo
                     </span>
                 </div>
             </div>
+
+            {/* ─── Week Generation Control ─────────────────────
+                Lazy week-by-week generation: advance the block by generating
+                the next ungenerated week's session inventory. Without this the
+                athlete dead-ends on an empty week with no way forward. */}
+            {showGenerateNext && (
+                <div className="border border-cyan-500/30 bg-cyan-950/10 p-4 flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-space-grotesk font-bold text-cyan-50">
+                            {weekIsEmpty ? 'No sessions for this week yet' : 'Week complete'}
+                        </h4>
+                        <p className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider mt-0.5">
+                            {weekIsEmpty
+                                ? 'Generate your next week of training to continue'
+                                : 'Generate the next week to keep the block moving'}
+                        </p>
+                        {generationError && (
+                            <p className="text-[11px] text-amber-400 font-inter mt-2">{generationError}</p>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {weekIsEmpty && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleRegenerate}
+                                disabled={isRegenerating || isGeneratingNext || !currentWeek}
+                                className="text-[10px] border border-white/5 text-neutral-500 hover:text-cyan-400 hover:border-cyan-500/30"
+                            >
+                                {isRegenerating ? (
+                                    <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Regenerating…</>
+                                ) : (
+                                    <><RefreshCw className="w-3 h-3 mr-1.5" /> Regenerate this week</>
+                                )}
+                            </Button>
+                        )}
+                        <Button
+                            size="sm"
+                            onClick={handleGenerateNext}
+                            disabled={isGeneratingNext || isRegenerating}
+                            className="bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-mono uppercase tracking-wider"
+                        >
+                            {isGeneratingNext ? (
+                                <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Generating…</>
+                            ) : (
+                                <><Sparkles className="w-3 h-3 mr-1.5" /> Generate Next Week</>
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {/* ─── Training Plan (expandable) ──────────────── */}
             {currentMesocycle && (
