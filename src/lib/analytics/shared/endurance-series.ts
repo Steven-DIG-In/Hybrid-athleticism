@@ -38,9 +38,10 @@ interface CardioLogRow {
  * - everything else (rucking/rowing/swimming/cycling): duration delta % (those
  *   modalities are zone/HR-governed with no precise pace target this layer)
  *
- * Falls back to 0 when the governing target or actual is missing (e.g. the
- * workout was marked complete but never logged) so every qualifying session
- * still contributes one point rather than being dropped.
+ * Falls back to 0 when the governing target or actual field is missing on an
+ * otherwise-logged session (e.g. a rucking log with no duration_minutes) so
+ * that session still contributes one point rather than being dropped. Fully
+ * unlogged sessions never reach here — they're filtered out upstream.
  */
 function primaryDeltaPct(
   modality: EnduranceModality,
@@ -58,7 +59,10 @@ function primaryDeltaPct(
 /**
  * Returns up to `limit` (default 20) DeltaPoints for a user's completed CARDIO
  * workouts, oldest-first (so the chart reads left-to-right chronologically).
- * Empty array when there are no qualifying (completed + prescribed) sessions.
+ * Sessions with no matching `cardio_logs` actual (unlogged) are excluded — a
+ * completed-but-unlogged workout must not render as an on-target dot at the
+ * chart's midline. Contract: N completed-AND-LOGGED cardio sessions with a
+ * prescription -> N points. Empty array when there are no qualifying sessions.
  */
 export async function getRecentEnduranceDeltaSeries(
   userId: string,
@@ -97,6 +101,9 @@ export async function getRecentEnduranceDeltaSeries(
     if (!prescription) continue
 
     const log = logByWorkout.get(w.id)
+    if (!log) continue // no matching cardio_logs actual -> computeEnduranceDelta would return
+    // status: 'unlogged'; skip rather than emit a misleading on-target (delta_pct: 0) point.
+
     const actual: ActualEndurance = {
       distanceKm: log?.distance_km ?? null,
       durationMinutes: log?.duration_minutes ?? null,

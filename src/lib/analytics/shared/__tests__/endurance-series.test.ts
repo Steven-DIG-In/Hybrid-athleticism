@@ -130,11 +130,11 @@ describe('getRecentEnduranceDeltaSeries', () => {
     expect(points[0]).toEqual({ date: '2026-07-01', delta_pct: 10 })
   })
 
-  it('5: completed cardio workout with no matching cardio_logs row still yields a point (delta_pct 0)', async () => {
+  it('5: completed cardio workout with no matching cardio_logs row is excluded (unlogged, not on-target)', async () => {
     fixtures.workouts.push({ id: 'w1', completed_at: '2026-07-01T10:00:00Z', endurance_prescription: RUNNING_PRESCRIPTION })
     // no matching fixtures.cardioLogs entry
 
     const points = await getRecentEnduranceDeltaSeries(USER)
-    expect(points).toEqual([{ date: '2026-07-01', delta_pct: 0 }])
+    expect(points).toEqual([])
   })
 })
