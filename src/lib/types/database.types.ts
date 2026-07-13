@@ -310,6 +310,42 @@ export type Database = {
         }
         Relationships: []
       }
+      athlete_capabilities: {
+        Row: {
+          capability_key: string
+          current_value: number
+          evidence: Json
+          family: string
+          id: string
+          source: string
+          unit: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          capability_key: string
+          current_value: number
+          evidence?: Json
+          family: string
+          id?: string
+          source: string
+          unit: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          capability_key?: string
+          current_value?: number
+          evidence?: Json
+          family?: string
+          id?: string
+          source?: string
+          unit?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       athlete_injuries: {
         Row: {
           body_area: Database["public"]["Enums"]["injury_body_area"]
@@ -2683,6 +2719,7 @@ export type Database = {
           completed_at: string | null
           completed_date: string | null
           created_at: string
+          endurance_prescription: Json | null
           id: string
           is_allocated: boolean
           is_completed: boolean
@@ -2700,6 +2737,7 @@ export type Database = {
           completed_at?: string | null
           completed_date?: string | null
           created_at?: string
+          endurance_prescription?: Json | null
           id?: string
           is_allocated?: boolean
           is_completed?: boolean
@@ -2717,6 +2755,7 @@ export type Database = {
           completed_at?: string | null
           completed_date?: string | null
           created_at?: string
+          endurance_prescription?: Json | null
           id?: string
           is_allocated?: boolean
           is_completed?: boolean
@@ -3208,6 +3247,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 
 /**
