@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { getEnduranceAnalytics } from '@/lib/actions/data.actions'
 import { EnduranceDashboard } from '@/components/data/EnduranceDashboard'
-import { getRecentCoachDeltaSeries } from '@/lib/analytics/shared/coach-domain'
+import { getRecentEnduranceDeltaSeries } from '@/lib/analytics/shared/endurance-series'
 import { detectPattern } from '@/lib/analytics/coach-bias'
 import { createClient } from '@/lib/supabase/server'
 import { PerformanceDeltaChart } from '@/components/data/domain/PerformanceDeltaChart'
@@ -22,15 +22,15 @@ export default async function EndurancePage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     // user is guaranteed non-null because getEnduranceAnalytics already succeeded.
-    const series = user
-        ? await getRecentCoachDeltaSeries(user.id, 'endurance', { limit: 20 })
+    // getRecentEnduranceDeltaSeries already returns points oldest-first for the chart.
+    const points = user
+        ? await getRecentEnduranceDeltaSeries(user.id, { limit: 20 })
         : []
-    const points = series.slice().reverse().map(d => ({
-        date: d.created_at.slice(0, 10),
-        delta_pct: d.delta_pct,
-    }))
+    // detectPattern wants newest-first; there's no session id on a DeltaPoint, so
+    // the (unique-enough) date stands in for workout_id — detectPattern only surfaces
+    // it in PatternSignal.workoutIds, which PatternFlagCard doesn't render.
     const flag = detectPattern(
-        series.map(d => ({ delta_pct: d.delta_pct, workout_id: d.session_inventory_id })),
+        points.slice().reverse().map(d => ({ delta_pct: d.delta_pct, workout_id: d.date })),
     )
 
     return (
