@@ -16,8 +16,12 @@ import { ExerciseHistoryPanel } from "@/components/workout/ExerciseHistoryPanel"
 import { CoachNotesBanner } from "@/components/workout/CoachNotesBanner"
 import type { WorkoutWithSets } from "@/lib/types/training.types"
 import type { ExerciseSet } from "@/lib/types/database.types"
-import { estimate1RM } from "@/lib/training/methodology-helpers"
+import { estimate1RM, formatPace } from "@/lib/training/methodology-helpers"
 import { computeSetDelta } from "@/core/domains/strength/plan-vs-actual"
+import { computeEnduranceDelta } from "@/core/domains/endurance/plan-vs-actual"
+import {
+    parseEndurancePrescription, toPrescribedEndurance, summarizeEnduranceDelta, zoneAdherenceLabel,
+} from "@/core/domains/endurance/plan-vs-actual.wiring"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -175,6 +179,12 @@ function ConditioningLogger({
     const isEndurance = workout.modality === 'CARDIO'
     const shouldShowStructuredWorkout = isMetcon || isEndurance
 
+    // Frozen VDOT prescription (Task 1/4) — null for pre-migration rows, never crashes.
+    const prescription = useMemo(
+        () => parseEndurancePrescription(workout.endurance_prescription),
+        [workout.endurance_prescription],
+    )
+
     // Result state
     const [isRx, setIsRx] = useState(true)
     const [rpe, setRpe] = useState(7)
@@ -211,8 +221,9 @@ function ConditioningLogger({
                         avgPaceSecPerKm = Math.round(paceMinPerKm * 60)
                     }
 
-                    // Log cardio session
-                    await logCardioSession({
+                    // Log cardio session (Stage-3 fix: the result was previously swallowed —
+                    // a failed insert would silently fall through to completeWorkout below).
+                    const cardioRes = await logCardioSession({
                         workoutId: workout.id,
                         durationMinutes: Math.max(durationMinutes, 1),
                         distanceKm: dist > 0 ? dist : undefined,
@@ -221,6 +232,10 @@ function ConditioningLogger({
                         perceivedEffortRpe: rpe,
                         cardioType: 'ZONE_2', // Default, could be inferred from parsedNotes.meta
                     })
+                    if (!cardioRes.success) {
+                        setError(cardioRes.error ?? "Failed to log cardio session.")
+                        return
+                    }
                 }
 
                 // Build conditioning result (only for METCON sessions)
@@ -519,6 +534,27 @@ function ConditioningLogger({
                             <div className="h-px flex-1 bg-[#222]" />
                         </div>
 
+                        {/* Prescribed target (Task 1/4's frozen EndurancePrescription) —
+                            null for pre-migration rows, renders nothing then. */}
+                        {prescription && (
+                            <div className="border border-[#222] bg-[#0a0a0a] p-4 space-y-1">
+                                <p className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+                                    Target
+                                </p>
+                                <p className="text-sm font-inter text-neutral-200">
+                                    {prescription.intensityZone.replace('_', ' ')}
+                                    {prescription.targetDistanceKm !== null && ` · ${prescription.targetDistanceKm} km`}
+                                    {prescription.targetDurationMin !== null && ` · ${prescription.targetDurationMin} min`}
+                                    {prescription.targetPaceSecPerKm !== null && ` · ${formatPace(prescription.targetPaceSecPerKm)}/km`}
+                                </p>
+                                {prescription.source === 'formula' && prescription.paceSource && (
+                                    <p className="text-[10px] font-mono text-neutral-600">
+                                        {prescription.paceSource}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
                         {/* Distance & Time Input */}
                         <div className="border border-[#222] bg-[#0a0a0a] p-4 space-y-4">
                             <div>
@@ -604,6 +640,40 @@ function ConditioningLogger({
                                 return null
                             })()}
                         </div>
+
+                        {/* Plan-vs-actual delta (Task 5) — mirrors the strength computeSetDelta
+                            readout; live-computed off the actuals form, gated on the athlete
+                            having actually entered a distance + time (not the RPE default). */}
+                        {prescription && distanceKm && (timeMinutes || timeSeconds) && (() => {
+                            const dist = parseFloat(distanceKm)
+                            const totalMinutes = (parseInt(timeMinutes) || 0) + (parseInt(timeSeconds) || 0) / 60
+                            const avgPaceSecPerKm = dist > 0 && totalMinutes > 0
+                                ? Math.round((totalMinutes / dist) * 60)
+                                : null
+                            const delta = computeEnduranceDelta(toPrescribedEndurance(prescription), {
+                                distanceKm: dist > 0 ? dist : null,
+                                durationMinutes: totalMinutes > 0 ? totalMinutes : null,
+                                avgPaceSecPerKm,
+                                avgHeartRateBpm: avgHeartRate ? parseInt(avgHeartRate) : null,
+                                perceivedEffortRpe: rpe,
+                            })
+                            const summary = summarizeEnduranceDelta(delta)
+                            if (!summary.hasData) return null
+                            const tone =
+                                summary.zoneAdherence === 'in_zone' ? 'text-green-400'
+                                    : summary.zoneAdherence === 'unknown' ? 'text-neutral-500'
+                                        : 'text-amber-400'
+                            const label = zoneAdherenceLabel(summary.zoneAdherence)
+                            const text = [
+                                summary.parts.length > 0 ? `vs plan: ${summary.parts.join(' · ')}` : 'On target',
+                                label,
+                            ].filter(Boolean).join(' · ')
+                            return (
+                                <div className={`text-[10px] font-mono tracking-widest uppercase ${tone}`}>
+                                    {text}
+                                </div>
+                            )
+                        })()}
 
                         {/* RPE Selector */}
                         <RPESelector value={rpe} onChange={setRpe} disabled={isPending} />
