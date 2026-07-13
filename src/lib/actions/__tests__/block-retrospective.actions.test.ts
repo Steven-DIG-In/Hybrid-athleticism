@@ -6,7 +6,7 @@ const { state } = vi.hoisted(() => ({
     existingRetrospective: null as any,
     rpcCalls: [] as Array<{ name: string; args: any }>,
     rpcResult: null as any,
-    rpcShouldThrow: null as Error | null,
+    rpcError: null as { message: string } | null,
     user: { id: 'u1' } as any,
   },
 }))
@@ -54,8 +54,8 @@ vi.mock('@/lib/supabase/server', () => {
     auth: { getUser: vi.fn(async () => ({ data: { user: state.user } })) },
     rpc: vi.fn(async (name: string, args: any) => {
       state.rpcCalls.push({ name, args })
-      if (state.rpcShouldThrow) throw state.rpcShouldThrow
-      return { data: state.rpcResult, error: null }
+      // supabase-js resolves with an `error` field on failure — it does not throw.
+      return { data: state.rpcError ? null : state.rpcResult, error: state.rpcError }
     }),
   }
   return { createClient: vi.fn(async () => client) }
@@ -86,7 +86,7 @@ describe('block-retrospective actions', () => {
     state.existingRetrospective = null
     state.rpcCalls.length = 0
     state.rpcResult = null
-    state.rpcShouldThrow = null
+    state.rpcError = null
     state.user = { id: 'u1' }
     vi.clearAllMocks()
   })
@@ -123,14 +123,25 @@ describe('block-retrospective actions', () => {
       if (!r.success) expect(r.error).toMatch(/not authenticated/i)
     })
 
-    it('surfaces RPC throw as failure result', async () => {
+    it('surfaces an RPC error as a failure result', async () => {
       state.mesocycle = { id: 'm1', user_id: 'u1', is_active: true, is_complete: false }
-      state.rpcShouldThrow = new Error('mesocycle already closed')
+      state.rpcError = { message: 'mesocycle already closed' }
 
       const r = await closeMesocycle('m1')
 
       expect(r.success).toBe(false)
       if (!r.success) expect(r.error).toMatch(/already closed/i)
+    })
+
+    it('does not report success when the RPC fails', async () => {
+      state.mesocycle = { id: 'm1', user_id: 'u1', is_active: true, is_complete: false }
+      state.rpcError = { message: 'constraint violation' }
+
+      const r = await closeMesocycle('m1')
+
+      // Regression guard: a swallowed RPC error previously returned success.
+      expect(r.success).toBe(false)
+      if (!r.success) expect(r.error).toBe('constraint violation')
     })
   })
 

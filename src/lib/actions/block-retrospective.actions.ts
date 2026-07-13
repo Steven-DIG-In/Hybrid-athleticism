@@ -42,15 +42,21 @@ export async function closeMesocycle(
     return { success: false, error: `Failed to build retrospective snapshot: ${(e as Error).message}` }
   }
 
-  // Atomic close via RPC.
-  try {
-    await supabase.rpc('close_mesocycle', {
-      p_mesocycle_id: mesocycleId,
-      p_snapshot: snapshot as unknown as Record<string, unknown>,
-    })
-  } catch (e) {
-    const msg = (e as Error).message
-    return { success: false, error: msg.includes('already closed') ? 'Block already closed' : msg }
+  // Atomic close via RPC. supabase-js resolves (does not throw) on a
+  // Postgres/PostgREST error, so the error must be read off the result — a
+  // bare try/catch never fires and would silently report a failed close as a
+  // success (block stays active, no retrospective row written).
+  const { error: rpcError } = await supabase.rpc('close_mesocycle', {
+    p_mesocycle_id: mesocycleId,
+    p_snapshot: snapshot as unknown as Record<string, unknown>,
+  })
+  if (rpcError) {
+    return {
+      success: false,
+      error: rpcError.message.includes('already closed')
+        ? 'Block already closed'
+        : rpcError.message,
+    }
   }
 
   revalidatePath('/dashboard')

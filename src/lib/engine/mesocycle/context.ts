@@ -142,9 +142,9 @@ export async function buildAthleteContext(
     const [retroResult, profileNotesResult] = await Promise.all([
         supabase
             .from('block_retrospectives')
-            .select('snapshot_json')
+            .select('snapshot')
             .eq('user_id', userId)
-            .order('created_at', { ascending: false })
+            .order('generated_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
         supabase
@@ -155,7 +155,7 @@ export async function buildAthleteContext(
     ])
 
     const latestBlockRetrospective =
-        (retroResult.data?.snapshot_json as BlockRetrospectiveSnapshot) ?? null
+        (retroResult.data?.snapshot as BlockRetrospectiveSnapshot) ?? null
     const pendingPlannerNotes =
         (profileNotesResult.data?.pending_planner_notes as PendingPlannerNotes) ?? null
 

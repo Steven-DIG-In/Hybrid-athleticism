@@ -186,6 +186,7 @@ async function autoAllocateWeek(mesocycleId: string, weekNumber: number): Promis
  */
 export async function generateWeekInventory(
     microcycleId: string,
+    opts: { force?: boolean } = {},
 ): Promise<ActionResult<{ sessions: number; weekNumber: number; mesocycleId: string }>> {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -199,6 +200,32 @@ export async function generateWeekInventory(
         .single()
     if (mcErr || !microcycle) {
         return { success: false, error: mcErr?.message ?? 'Microcycle not found' }
+    }
+
+    // Idempotency guard: if this week already has inventory, treat generation as
+    // a no-op and return the existing count. Without this, a double-dispatch of
+    // the wizard/lazy path (retry, double-click, concurrent request) stacks a
+    // second AI-generated pool on top of the first — the root cause of a week
+    // ending up with ~2x its intended sessions. `regenerateWeekInventory` opts
+    // out via `force: true` because it has already deleted the rows it means to
+    // replace.
+    if (!opts.force) {
+        const { count } = await supabase
+            .from('session_inventory')
+            .select('id', { count: 'exact', head: true })
+            .eq('mesocycle_id', microcycle.mesocycle_id)
+            .eq('week_number', microcycle.week_number)
+            .eq('user_id', user.id)
+        if ((count ?? 0) > 0) {
+            return {
+                success: true,
+                data: {
+                    sessions: count ?? 0,
+                    weekNumber: microcycle.week_number,
+                    mesocycleId: microcycle.mesocycle_id,
+                },
+            }
+        }
     }
 
     await cleanOrphanWorkouts(supabase as Supa, user.id, [microcycle.id])
@@ -333,7 +360,10 @@ export async function regenerateWeekInventory(
         return { success: false, error: `Failed to delete old inventory: ${deleteError.message}` }
     }
 
-    const result = await generateWeekInventory(micro.id)
+    // force: the delete above already removed the rows we intend to replace, so
+    // bypass the idempotency guard (allocated/completed rows may legitimately
+    // remain and would otherwise short-circuit regeneration).
+    const result = await generateWeekInventory(micro.id, { force: true })
     if (!result.success) return result
 
     revalidatePath('/dashboard')

@@ -34,7 +34,7 @@ vi.mock('@/lib/supabase/server', () => {
             }
             if (table === 'block_retrospectives') {
                 return state.retrospective
-                    ? { snapshot_json: state.retrospective }
+                    ? { snapshot: state.retrospective }
                     : null
             }
             return null
