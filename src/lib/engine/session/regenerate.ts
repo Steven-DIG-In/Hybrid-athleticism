@@ -18,10 +18,12 @@ import { findOptimalDayForSession } from '@/lib/scheduling/auto-assign'
 import { deduplicateBenchmarks } from '@/lib/engine/mesocycle/context'
 import {
     insertLiftingSets,
-    insertEnduranceTarget,
     buildCoachNotes,
     mapModality,
 } from '@/lib/engine/microcycle/persistence'
+import { getAthleteState } from '@/lib/athlete/get-athlete-state'
+import { vdotPacesFromCapability } from '@/core/domains/endurance/from-endurance-session'
+import { endurancePrescriptionFromLiveSession } from '@/core/domains/endurance/from-live-session'
 import type { ActionResult } from '@/lib/types/training.types'
 import type { Workout } from '@/lib/types/database.types'
 
@@ -360,6 +362,17 @@ export async function regenerateSingleSession(
     const dbModality = mapModality(session.modality)
     const coachNotes = buildCoachNotes(session, profile.transparency ?? 'minimal')
 
+    // Freeze the endurance prescription for CARDIO sessions at generation
+    // time, resolving run VDOT paces from Layer 1 capabilities if available.
+    let endurancePrescription = null
+    if (session.modality === 'CARDIO') {
+        const athleteStateForVdot = await getAthleteState(user.id).catch(() => undefined)
+        const runCap = athleteStateForVdot?.capabilities.endurance
+            .find(c => ['run_5k', 'run_10k', 'run_1mile'].includes(c.key))
+        const runVdotPaces = vdotPacesFromCapability(runCap)
+        endurancePrescription = endurancePrescriptionFromLiveSession(session, runVdotPaces)
+    }
+
     const { data: workout, error: insertErr } = await supabase
         .from('workouts')
         .insert({
@@ -371,6 +384,7 @@ export async function regenerateSingleSession(
             is_allocated: false,
             is_completed: false,
             coach_notes: coachNotes,
+            endurance_prescription: endurancePrescription,
         })
         .select()
         .single()
@@ -383,11 +397,6 @@ export async function regenerateSingleSession(
     // Insert exercise_sets for LIFTING sessions
     if (session.modality === 'LIFTING') {
         await insertLiftingSets(supabase, workout.id, user.id, session)
-    }
-
-    // Insert cardio_logs skeleton for CARDIO sessions
-    if (session.modality === 'CARDIO') {
-        await insertEnduranceTarget(supabase, workout.id, user.id, session)
     }
 
     revalidatePath('/dashboard')

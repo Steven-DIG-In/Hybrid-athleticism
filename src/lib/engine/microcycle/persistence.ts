@@ -170,37 +170,3 @@ export async function insertLiftingSets(
         }
     }
 }
-
-/**
- * Insert a cardio_log target entry for an endurance session.
- * This creates a "target" row that the athlete fills in with actuals during logging.
- */
-export async function insertEnduranceTarget(
-    supabase: Awaited<ReturnType<typeof createClient>>,
-    workoutId: string,
-    userId: string,
-    session: EnduranceSession
-): Promise<void> {
-    // Map intensity zone to cardio_type
-    const cardioTypeMap: Record<string, string> = {
-        zone_2: 'ZONE_2',
-        easy: 'EASY',
-        tempo: 'TEMPO',
-        threshold: 'TEMPO',
-        vo2max: 'VO2_MAX',
-        interval: 'VO2_MAX',
-    }
-
-    const { error } = await supabase.from('cardio_logs').insert({
-        workout_id: workoutId,
-        user_id: userId,
-        cardio_type: cardioTypeMap[session.intensityZone] ?? 'ZONE_2',
-        duration_minutes: session.estimatedDurationMinutes,
-        distance_km: session.targetDistanceKm ?? null,
-        avg_pace_sec_per_km: session.targetPaceSecPerKm ?? null,
-    })
-
-    if (error) {
-        console.error(`[insertEnduranceTarget] Failed for workout ${workoutId}:`, error)
-    }
-}

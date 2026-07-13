@@ -30,10 +30,12 @@ import { extractWeekBrief } from '@/lib/engine/mesocycle/strategy'
 import { MesocycleStrategySchema, type MesocycleStrategyValidated } from '@/lib/ai/schemas/week-brief'
 import {
     insertLiftingSets,
-    insertEnduranceTarget,
     buildCoachNotes,
     mapModality,
 } from '@/lib/engine/microcycle/persistence'
+import { getAthleteState } from '@/lib/athlete/get-athlete-state'
+import { vdotPacesFromCapability } from '@/core/domains/endurance/from-endurance-session'
+import { endurancePrescriptionFromLiveSession } from '@/core/domains/endurance/from-live-session'
 
 // ─── Generate Session Pool for a Single Week ────────────────────────────────
 
@@ -443,6 +445,13 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
 
     console.log(`[generateSessionPool] AI returned ${sessionPool.sessions.length} sessions, inserting...`)
 
+    // Resolve the athlete's run VDOT paces once, up front — every CARDIO
+    // session this loop inserts reuses the same formula-derived pace bands.
+    const athleteStateForVdot = await getAthleteState(user.id).catch(() => undefined)
+    const runCap = athleteStateForVdot?.capabilities.endurance
+        .find(c => ['run_5k', 'run_10k', 'run_1mile'].includes(c.key))
+    const runVdotPaces = vdotPacesFromCapability(runCap)
+
     for (let i = 0; i < sessionPool.sessions.length; i++) {
         const session = sessionPool.sessions[i]
 
@@ -451,6 +460,12 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
 
         // Build coach notes based on session type
         const coachNotes = buildCoachNotes(session, profile.transparency ?? 'minimal')
+
+        // Freeze the endurance prescription for CARDIO sessions at generation
+        // time — the immutable target the athlete logs against later.
+        const endurancePrescription = session.modality === 'CARDIO'
+            ? endurancePrescriptionFromLiveSession(session, runVdotPaces)
+            : null
 
         // Insert workout — unallocated, using start_date as placeholder
         const { data: workout, error: workoutError } = await supabase
@@ -464,6 +479,7 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
                 is_allocated: false,
                 is_completed: false,
                 coach_notes: coachNotes,
+                endurance_prescription: endurancePrescription,
             })
             .select()
             .single()
@@ -480,11 +496,6 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
         // Insert exercise_sets for LIFTING sessions
         if (session.modality === 'LIFTING') {
             await insertLiftingSets(supabase, workout.id, user.id, session)
-        }
-
-        // Insert cardio_logs skeleton for CARDIO sessions (targets only, not logged data)
-        if (session.modality === 'CARDIO') {
-            await insertEnduranceTarget(supabase, workout.id, user.id, session)
         }
     }
 
