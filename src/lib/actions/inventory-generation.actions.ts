@@ -11,7 +11,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/lib/types/database.types'
+import type { Database, Json } from '@/lib/types/database.types'
 import type { ActionResult } from '@/lib/types/training.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generateSessionPool } from '@/lib/engine/microcycle/generate-pool'
@@ -40,6 +40,10 @@ async function convertWorkoutsToInventory(
 
     for (const workout of workouts) {
         let exercisePrescription = null
+        let endurancePrescription: Json | null = null
+        if (workout.modality === 'CARDIO') {
+            endurancePrescription = (workout as { endurance_prescription?: Json | null }).endurance_prescription ?? null
+        }
         if (workout.modality === 'LIFTING') {
             const { data: sets } = await supabase
                 .from('exercise_sets')
@@ -94,7 +98,9 @@ async function convertWorkoutsToInventory(
                 carry_over_notes: null,
                 adjustment_pending: exercisePrescription
                     ? { prescription: exercisePrescription }
-                    : null,
+                    : endurancePrescription
+                        ? { endurancePrescription }
+                        : null,
             })
 
         if (insertError) {
@@ -109,7 +115,6 @@ async function convertWorkoutsToInventory(
     const workoutIds = workouts.map(w => w.id)
     if (workoutIds.length > 0) {
         await supabase.from('exercise_sets').delete().in('workout_id', workoutIds)
-        await supabase.from('cardio_logs').delete().in('workout_id', workoutIds)
         await supabase.from('workouts').delete().in('id', workoutIds).eq('user_id', userId)
     }
 

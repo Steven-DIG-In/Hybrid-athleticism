@@ -732,6 +732,8 @@ export async function applyAllocation(
                     is_completed: false,
                     is_allocated: true,
                     session_inventory_id: session.id,
+                    endurance_prescription:
+                        (session.adjustment_pending as { endurancePrescription?: unknown } | null)?.endurancePrescription ?? null,
                 })
                 .select('id')
                 .single()
