@@ -183,7 +183,7 @@ describe('endurance prescription round-trip', () => {
                 completed_at: null,
                 is_approved: true,
                 carry_over_notes: null,
-                adjustment_pending: { endurancePrescription: FAKE_PRESCRIPTION },
+                adjustment_pending: { endurancePrescription: FAKE_PRESCRIPTION } as unknown as SessionInventory['adjustment_pending'],
                 created_at: '2026-04-17T00:00:00Z',
                 updated_at: '2026-04-17T00:00:00Z',
                 ...overrides,
