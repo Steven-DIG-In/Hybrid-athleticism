@@ -27,7 +27,7 @@ export default async function Page({ params }: { params: Promise<{ tile: string 
   const { tile } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/sign-in')
+  if (!user) redirect('/login')
 
   if (tile === 'adherence') {
     // currentBlockHeatmap needs (mesocycleId, weekNumber). Derive from block_pointer

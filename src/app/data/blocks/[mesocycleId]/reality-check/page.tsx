@@ -10,7 +10,7 @@ export default async function Page({ params }: { params: Promise<{ mesocycleId: 
   const { mesocycleId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/sign-in')
+  if (!user) redirect('/login')
 
   const [retroResult, profileQuery, notesResult] = await Promise.all([
     getBlockRetrospective(mesocycleId),

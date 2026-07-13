@@ -50,7 +50,7 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
 
     // Protected route prefixes — must be authenticated to access
-    const protectedPrefixes = ['/dashboard', '/onboarding', '/workout', '/coach', '/profile', '/admin']
+    const protectedPrefixes = ['/dashboard', '/onboarding', '/workout', '/coach', '/profile', '/admin', '/data']
     const isProtectedRoute = protectedPrefixes.some((prefix) =>
         pathname.startsWith(prefix)
     )

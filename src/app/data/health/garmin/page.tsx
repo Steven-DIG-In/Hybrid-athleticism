@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 export default async function Page() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/sign-in')
+  if (!user) redirect('/login')
 
   const [credsRes, dailiesRes, vo2Res] = await Promise.all([
     supabase.from('garmin_credentials').select('last_sync_at, last_sync_status').eq('user_id', user.id).maybeSingle(),

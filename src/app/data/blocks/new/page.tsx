@@ -14,7 +14,7 @@ export const maxDuration = 300
 export default async function NewBlockPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/sign-in')
+  if (!user) redirect('/login')
 
   const [retroResult, notesResult, orphanResult] = await Promise.all([
     getLatestBlockRetrospective(),

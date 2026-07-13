@@ -8,7 +8,7 @@ import { redirect } from 'next/navigation'
 export default async function HealthDomainPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/sign-in')
+  if (!user) redirect('/login')
 
   const snap = await getHealthSnapshot()
   const [medicals, bodyComp] = await Promise.all([
