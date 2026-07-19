@@ -13,6 +13,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { recordCapability } from '@/lib/athlete/capabilities.actions'
+import { normalizeExerciseKey } from '@/lib/training/exercise-key'
 
 export type TrainingMaxSource = 'onboarding' | 'recalibration' | 'intervention_response'
 
@@ -27,6 +28,9 @@ export async function getTrainingMax(exercise: string): Promise<TrainingMaxEntry
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('unauthenticated')
 
+    const key = normalizeExerciseKey(exercise)
+    if (!key) return null
+
     const { data, error } = await supabase
         .from('profiles')
         .select('training_maxes')
@@ -34,7 +38,7 @@ export async function getTrainingMax(exercise: string): Promise<TrainingMaxEntry
         .maybeSingle()
     if (error) throw error
     const map = (data?.training_maxes ?? {}) as Record<string, TrainingMaxEntry>
-    return map[exercise] ?? null
+    return map[key] ?? null
 }
 
 export interface SetTrainingMaxInput {
@@ -43,10 +47,18 @@ export interface SetTrainingMaxInput {
     source: TrainingMaxSource
 }
 
-export async function setTrainingMax(input: SetTrainingMaxInput): Promise<TrainingMaxEntry> {
+export async function setTrainingMax(input: SetTrainingMaxInput): Promise<TrainingMaxEntry | null> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('unauthenticated')
+
+    // Only the four main lifts carry a training max. Accessories progress via
+    // the week-to-week LLM loop that reads last week's actuals; writing TMs for
+    // them polluted this map with "Bench Press (Warm-up)" and
+    // "Back Squat (Supplemental BBB)" entries that no reader ever wanted.
+    // Returns null (not a throw) — callers treat it as "nothing to record".
+    const key = normalizeExerciseKey(input.exercise)
+    if (!key) return null
 
     // Read → merge → write. No atomic concurrency guarantee — acceptable for a personal app.
     const entry: TrainingMaxEntry = {
@@ -63,7 +75,7 @@ export async function setTrainingMax(input: SetTrainingMaxInput): Promise<Traini
     if (readErr) throw readErr
 
     const current = (profile?.training_maxes ?? {}) as Record<string, TrainingMaxEntry>
-    const next = { ...current, [input.exercise]: entry }
+    const next = { ...current, [key]: entry }
 
     const { error: writeErr } = await supabase
         .from('profiles')
@@ -74,8 +86,11 @@ export async function setTrainingMax(input: SetTrainingMaxInput): Promise<Traini
     // Write-through to the canonical capability store. intervention_response maps to
     // recalibration. Failures must not break the training-max write.
     try {
+        // 'back_squat' → 'back squat', an existing alias in capability-registry.
+        // Passing the raw exercise_name here meant recordCapability rejected most
+        // writes as unmapped, so Layer-1 capabilities never recalibrated either.
         await recordCapability({
-            name: input.exercise,
+            name: key.replace(/_/g, ' '),
             value: entry.trainingMaxKg,
             source: input.source === 'intervention_response' ? 'recalibration' : input.source,
             evidence: { from: 'training_max', source: input.source },
