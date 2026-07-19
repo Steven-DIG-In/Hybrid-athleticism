@@ -1183,6 +1183,35 @@ git commit -m "feat(strength): recalibration reads logged RIR, prefers the AMRAP
 
 ---
 
+### Task 6b: Seed training maxes from recent logged performance
+
+Added mid-execution (2026-07-19), after Task 3 revealed the stored TMs are stale-low
+and now actually drive the program: squat 78.5 (29 Jun) despite an 85 kg × 3 @ RIR 1
+top set logged today; OHP 49.5 unchanged since 24 Apr.
+
+Requires Task 6's recalibration logic (AMRAP-aware top-set selection + `rir_actual`
+→ rpe derivation), so it runs after it.
+
+- [ ] **Step 1: Dry-run over the last 8 weeks of completed main-lift sets**
+
+Query `exercise_sets` joined to completed `workouts` for the four main lifts,
+group by normalized key, apply the new `pickTopSet` + `trainingMaxSkill` logic,
+and print a proposed table: current TM → proposed TM → the exact set it came from.
+
+- [ ] **Step 2: Present the table to Steven and get explicit approval**
+
+**Write nothing until approved.** This is production training data.
+
+- [ ] **Step 3: Apply approved values via `setTrainingMax` with source `'recalibration'`**
+
+- [ ] **Step 4: Verify and report**
+
+```sql
+select jsonb_pretty(training_maxes) from profiles;
+```
+
+---
+
 ### Task 7: Full verification and deploy
 
 - [ ] **Step 1: Install and run the whole suite**

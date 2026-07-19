@@ -60,6 +60,7 @@ async function convertWorkoutsToInventory(
                         targetWeightKg: number | null
                         targetRir: number | null
                         notes: string | null
+                        isAmrap: boolean
                     }>
                 }>()
                 for (const set of sets) {
@@ -75,6 +76,10 @@ async function convertWorkoutsToInventory(
                         targetWeightKg: set.target_weight_kg,
                         targetRir: set.target_rir,
                         notes: set.notes,
+                        // Must survive the round-trip — allocation re-expands this
+                        // prescription back into exercise_sets, and dropping the
+                        // flag here would silently un-mark every AMRAP set.
+                        isAmrap: set.is_amrap ?? false,
                     })
                 }
                 exercisePrescription = Array.from(exerciseMap.values())

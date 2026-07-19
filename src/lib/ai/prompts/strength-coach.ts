@@ -166,6 +166,10 @@ ${benchmarkStr}
 ${methodologyContext?.liftingProtocol ? `── METHODOLOGY-SPECIFIC TARGETS (use these exact numbers) ──
 ${methodologyContext.liftingProtocol}
 INSTRUCTION: Follow these calculated targets precisely. They come from validated formulas. You have creative freedom in exercise selection and accessories, but main lift weights/reps must match.
+
+CRITICAL — DO NOT COLLAPSE THE RAMP. Each rung of a percentage ramp is a SEPARATE exercise entry with "sets": 1 and its own "targetWeightKg". A wave written "5 @ 65kg, 5 @ 75kg, 5+ @ 85kg" is THREE entries, never one entry with sets:3 at an averaged weight — the schema holds one weight per entry, so merging them silently destroys the prescription.
+
+When a set is marked with "+" (e.g. "5+ @ 85kg"), it is an AMRAP / max-effort set: emit that entry with "isAmrap": true and set targetReps to the MINIMUM rep target.
 ` : ''}${methodologyContext?.volumeTargets ? `── VOLUME TARGETS ──
 ${methodologyContext.volumeTargets}
 ` : ''}── HYPERTROPHY COACH STATUS ──

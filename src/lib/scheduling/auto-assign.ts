@@ -228,6 +228,7 @@ export function buildTempWorkoutFromSession(
                     rir_actual: null,
                     rpe_actual: null,
                     notes: null,
+                    is_amrap: exercise.isAmrap ?? false,
                     is_pr: false,
                     logged_at: null,
                     created_at: new Date().toISOString(),

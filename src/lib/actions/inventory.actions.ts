@@ -760,6 +760,7 @@ export async function applyAllocation(
                                 target_weight_kg: set.targetWeightKg,
                                 target_rir: set.targetRir,
                                 notes: set.notes,
+                                is_amrap: set.isAmrap ?? false,
                             })
                         }
                     }

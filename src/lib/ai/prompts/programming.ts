@@ -393,6 +393,10 @@ LOAD INSTRUCTION: If spinal load or CNS load was high last week, moderate this w
 ── METHODOLOGY-SPECIFIC TARGETS (use these exact numbers) ──
 ${ctx.methodologyContext.liftingProtocol ? `LIFTING PROTOCOL:\n${ctx.methodologyContext.liftingProtocol}\n` : ''}${ctx.methodologyContext.volumeTargets ? `VOLUME TARGETS (sets per muscle group this week):\n${ctx.methodologyContext.volumeTargets}\n` : ''}${ctx.methodologyContext.endurancePlan ? `ENDURANCE PLAN:\n${ctx.methodologyContext.endurancePlan}\n` : ''}${ctx.methodologyContext.trainingPaces ? `TRAINING PACES:\n${ctx.methodologyContext.trainingPaces}\n` : ''}
 METHODOLOGY INSTRUCTION: Follow these calculated targets precisely. They come from validated formulas (5/3/1, RP landmarks, Daniels). Do not override them with your own estimates. You have creative freedom in exercise selection, session structure, and accessories — but the main lifts, volumes, and paces must match these targets.
+
+CRITICAL — DO NOT COLLAPSE THE RAMP. Each rung of a percentage ramp is a SEPARATE exercise entry with "sets": 1 and its own "targetWeightKg". A wave written "5 @ 65kg, 5 @ 75kg, 5+ @ 85kg" is THREE entries, never one entry with sets:3 at an averaged weight — the schema holds one weight per entry, so merging them silently destroys the prescription.
+
+When a set is marked with "+" (e.g. "5+ @ 85kg"), it is an AMRAP / max-effort set: emit that entry with "isAmrap": true and set targetReps to the MINIMUM rep target.
 ` : ''}${ctx.mesocyclePlan ? `
 ── MESOCYCLE PLAN CONTEXT ──
 Block Emphasis: ${ctx.mesocyclePlan.blockEmphasis}

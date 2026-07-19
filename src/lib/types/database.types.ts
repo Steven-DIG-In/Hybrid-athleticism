@@ -906,6 +906,7 @@ export type Database = {
           created_at: string
           exercise_name: string
           id: string
+          is_amrap: boolean
           is_pr: boolean | null
           logged_at: string | null
           muscle_group: string | null
@@ -925,6 +926,7 @@ export type Database = {
           created_at?: string
           exercise_name: string
           id?: string
+          is_amrap?: boolean
           is_pr?: boolean | null
           logged_at?: string | null
           muscle_group?: string | null
@@ -944,6 +946,7 @@ export type Database = {
           created_at?: string
           exercise_name?: string
           id?: string
+          is_amrap?: boolean
           is_pr?: boolean | null
           logged_at?: string | null
           muscle_group?: string | null
@@ -3247,6 +3250,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 
 

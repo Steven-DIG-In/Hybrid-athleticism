@@ -25,6 +25,7 @@ export const ExerciseSetSchema = z.object({
     targetRir: z.number().min(0).max(5).describe('Target reps in reserve'),
     notes: z.string().nullable().optional().describe('Coach notes for this exercise (e.g., "3-0-1-0 tempo", "pause at bottom")'),
     isBenchmarkTest: z.boolean().optional().describe('True if this exercise is a benchmark discovery test'),
+    isAmrap: z.boolean().optional().describe('True if this is a max-effort / AMRAP ("+") set — the athlete pushes past targetReps. Required on the final set of a 5/3/1 wave.'),
 })
 
 export const LiftingSessionSchema = z.object({

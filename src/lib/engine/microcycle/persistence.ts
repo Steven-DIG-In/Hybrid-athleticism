@@ -143,6 +143,7 @@ export async function insertLiftingSets(
         target_weight_kg: number | null
         target_rir: number
         notes: string | null
+        is_amrap: boolean
     }> = []
 
     let globalSetNumber = 1
@@ -158,6 +159,7 @@ export async function insertLiftingSets(
                 target_weight_kg: exercise.targetWeightKg,
                 target_rir: exercise.targetRir,
                 notes: exercise.notes ?? (exercise.isBenchmarkTest ? 'BENCHMARK TEST — log carefully' : null),
+                is_amrap: exercise.isAmrap ?? false,
             })
             globalSetNumber++
         }

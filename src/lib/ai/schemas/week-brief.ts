@@ -130,6 +130,8 @@ export const StrengthExerciseSchema = z.object({
     targetRir: z.number().min(0).max(5),
     notes: z.string().nullable(),
     isBenchmarkTest: z.boolean().optional(),
+    isAmrap: z.boolean().optional()
+        .describe('True if this is a max-effort / AMRAP ("+") set — the athlete pushes past targetReps. Required on the final set of a 5/3/1 wave.'),
     methodologySource: z.string().nullable().optional()
         .describe('Formula source for this prescription (e.g., "5/3/1 week 1: 3x5+ @ 85% TM")'),
 })
