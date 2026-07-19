@@ -1,0 +1,19 @@
+{
+  "_comment": "Backup of profiles.training_maxes taken 2026-07-19 immediately before migration 024_normalize_training_max_keys.sql rekeyed main lifts onto canonical keys. Restore by writing this object back to profiles.training_maxes for the single user.",
+  "Deadlift": { "source": "recalibration", "updatedAt": "2026-05-26T13:40:37.805Z", "trainingMaxKg": 94.5 },
+  "Back Squat": { "source": "recalibration", "updatedAt": "2026-06-29T09:01:06.153Z", "trainingMaxKg": 78.5 },
+  "Barbell Row": { "source": "recalibration", "updatedAt": "2026-04-25T12:47:04.110Z", "trainingMaxKg": 80 },
+  "Bench Press": { "source": "recalibration", "updatedAt": "2026-06-04T16:26:33.419Z", "trainingMaxKg": 59.5 },
+  "Front Squat": { "source": "recalibration", "updatedAt": "2026-05-14T14:19:45.626Z", "trainingMaxKg": 62.5 },
+  "Barbell Curl": { "source": "recalibration", "updatedAt": "2026-05-23T10:35:33.879Z", "trainingMaxKg": 30 },
+  "Overhead Press": { "source": "intervention_response", "updatedAt": "2026-04-24T05:26:05.261Z", "trainingMaxKg": 49.5 },
+  "Kettlebell Swing": { "source": "recalibration", "updatedAt": "2026-05-26T13:40:39.417Z", "trainingMaxKg": 32.5 },
+  "Romanian Deadlift": { "source": "recalibration", "updatedAt": "2026-05-09T09:01:36.086Z", "trainingMaxKg": 87 },
+  "Bench Press (Warm-up)": { "source": "recalibration", "updatedAt": "2026-06-04T16:26:32.433Z", "trainingMaxKg": 31.5 },
+  "Incline Dumbbell Press": { "source": "recalibration", "updatedAt": "2026-05-12T08:25:15.305Z", "trainingMaxKg": 29 },
+  "Single-Arm Kettlebell Row": { "source": "recalibration", "updatedAt": "2026-04-25T12:47:05.367Z", "trainingMaxKg": 33.5 },
+  "Deadlift (Supplemental BBB)": { "source": "recalibration", "updatedAt": "2026-05-21T13:09:21.393Z", "trainingMaxKg": 66 },
+  "Single-Leg Romanian Deadlift": { "source": "intervention_response", "updatedAt": "2026-05-18T07:28:37.291Z", "trainingMaxKg": 33.5 },
+  "Back Squat (Supplemental BBB)": { "source": "recalibration", "updatedAt": "2026-05-26T13:40:38.422Z", "trainingMaxKg": 60 },
+  "Overhead Press (Supplemental BBB)": { "source": "intervention_response", "updatedAt": "2026-06-20T09:53:54.327Z", "trainingMaxKg": 39 }
+}
