@@ -55,6 +55,59 @@ vi.mock('@/lib/supabase/server', () => {
                 id: 'w-empty', user_id: 'u1', modality: 'LIFTING',
                 microcycle_id: 'mc-1', session_inventory_id: null,
                 exercise_sets: []
+            }],
+            // Athlete logs RIR, never RPE — rpe_actual is null in production.
+            ['w-rir', {
+                id: 'w-rir', user_id: 'u1', modality: 'LIFTING',
+                microcycle_id: 'mc-1', session_inventory_id: null,
+                exercise_sets: [
+                    { exercise_name: 'Back Squat', set_number: 1, is_amrap: true,
+                      target_weight_kg: 85, target_reps: 3,
+                      actual_weight_kg: 85, actual_reps: 3,
+                      rpe_actual: null, rir_actual: 1 }
+                ]
+            }],
+            ['w-amrap', {
+                id: 'w-amrap', user_id: 'u1', modality: 'LIFTING',
+                microcycle_id: 'mc-1', session_inventory_id: null,
+                exercise_sets: [
+                    { exercise_name: 'Deadlift', set_number: 1, is_amrap: false,
+                      target_weight_kg: 90, target_reps: 3,
+                      actual_weight_kg: 90, actual_reps: 3,
+                      rpe_actual: null, rir_actual: 2 },
+                    { exercise_name: 'Deadlift', set_number: 2, is_amrap: true,
+                      target_weight_kg: 85, target_reps: 3,
+                      actual_weight_kg: 85, actual_reps: 8,
+                      rpe_actual: null, rir_actual: 0 }
+                ]
+            }],
+            ['w-variants', {
+                id: 'w-variants', user_id: 'u1', modality: 'LIFTING',
+                microcycle_id: 'mc-1', session_inventory_id: null,
+                exercise_sets: [
+                    { exercise_name: 'Back Squat (Warm-up)', set_number: 1, is_amrap: false,
+                      target_weight_kg: 52.5, target_reps: 5,
+                      actual_weight_kg: 52.5, actual_reps: 5,
+                      rpe_actual: null, rir_actual: 4 },
+                    { exercise_name: 'Back Squat', set_number: 2, is_amrap: true,
+                      target_weight_kg: 85, target_reps: 3,
+                      actual_weight_kg: 85, actual_reps: 5,
+                      rpe_actual: null, rir_actual: 1 },
+                    { exercise_name: 'Back Squat (FSL)', set_number: 3, is_amrap: false,
+                      target_weight_kg: 65, target_reps: 5,
+                      actual_weight_kg: 65, actual_reps: 5,
+                      rpe_actual: null, rir_actual: 3 }
+                ]
+            }],
+            ['w-accessory', {
+                id: 'w-accessory', user_id: 'u1', modality: 'LIFTING',
+                microcycle_id: 'mc-1', session_inventory_id: null,
+                exercise_sets: [
+                    { exercise_name: 'Romanian Deadlift', set_number: 1, is_amrap: false,
+                      target_weight_kg: 67.5, target_reps: 10,
+                      actual_weight_kg: 67.5, actual_reps: 10,
+                      rpe_actual: null, rir_actual: 2 }
+                ]
             }]
         ]),
         session_inventory: new Map<string, any>([
@@ -135,7 +188,9 @@ describe('recalibrateFromTopSet', () => {
             return { tier: 'visible', applied: true, newMax: input.observedMax, driftPct: 0 }
         })
         try {
-            await expect(recalibrateFromTopSet('w-lift')).resolves.toBeUndefined()
+            // Resolves with a summary containing only the exercise that succeeded.
+            const summary = await recalibrateFromTopSet('w-lift')
+            expect(summary.map(e => e.exercise)).toEqual(['Bench'])
             expect(callCount).toBe(2) // both exercises attempted
         } finally {
             ;(reca as any).evaluateRecalibration = orig
@@ -159,5 +214,51 @@ describe('recalibrateFromTopSet', () => {
         tierOverride.value = 'intervention'
         await recalibrateFromTopSet('w-lift')
         expect(setTrainingMaxCalls).toHaveLength(0)
+    })
+})
+
+// ─── Effort, top-set selection and grouping (2026-07-19) ────────────────────
+
+describe('recalibrateFromTopSet — effort and top-set selection', () => {
+    beforeEach(() => {
+        recalibrationCalls.length = 0
+        setTrainingMaxCalls.length = 0
+        tierOverride.value = 'logged'
+        vi.clearAllMocks()
+    })
+
+    it('derives rpe from rir_actual so logged effort reaches the estimator', async () => {
+        // 'w-rir': 85kg x3 @ RIR 1. rpe = 10 - 1 = 9 => effectiveReps = 3 + 1 = 4
+        // => 1RM = 85 * (1 + 4/30) = 96.3 => TM = 86.5. Without the RIR bridge
+        // rpe is undefined, effectiveReps = 3, and the TM lands lower.
+        const summary = await recalibrateFromTopSet('w-rir')
+        expect(summary).toHaveLength(1)
+        expect(summary[0].observedTrainingMaxKg).toBeGreaterThan(85)
+    })
+
+    it('prefers the AMRAP set over a heavier-targeted non-AMRAP set', async () => {
+        // 'w-amrap': 90kg x3 (not AMRAP) and 85kg x8 (AMRAP). The 8-rep AMRAP is
+        // the real strength signal even though it is the lighter load.
+        const summary = await recalibrateFromTopSet('w-amrap')
+        expect(summary).toHaveLength(1)
+        expect(summary[0].estimated1RMKg).toBeGreaterThan(100)
+    })
+
+    it('groups warm-up and FSL variants under the parent lift', async () => {
+        const summary = await recalibrateFromTopSet('w-variants')
+        expect(summary).toHaveLength(1)
+        expect(summary[0].exercise).toBe('Back Squat')
+    })
+
+    it('does not emit a summary entry for accessories', async () => {
+        const summary = await recalibrateFromTopSet('w-accessory')
+        expect(summary).toEqual([])
+        expect(recalibrationCalls).toHaveLength(0)
+    })
+
+    it('reports applied=false when the training max was not persisted', async () => {
+        tierOverride.value = 'intervention'
+        const summary = await recalibrateFromTopSet('w-rir')
+        expect(summary[0].applied).toBe(false)
     })
 })

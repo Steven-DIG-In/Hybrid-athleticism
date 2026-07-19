@@ -16,7 +16,9 @@ import { ExerciseHistoryPanel } from "@/components/workout/ExerciseHistoryPanel"
 import { CoachNotesBanner } from "@/components/workout/CoachNotesBanner"
 import type { WorkoutWithSets } from "@/lib/types/training.types"
 import type { ExerciseSet } from "@/lib/types/database.types"
-import { estimate1RM, formatPace } from "@/lib/training/methodology-helpers"
+import { formatPace } from "@/lib/training/methodology-helpers"
+import { SessionSummary } from "./SessionSummary"
+import type { RecalibrationSummaryEntry } from "@/lib/actions/recalibrate-from-top-set.actions"
 import { computeSetDelta } from "@/core/domains/strength/plan-vs-actual"
 import { computeEnduranceDelta } from "@/core/domains/endurance/plan-vs-actual"
 import {
@@ -839,6 +841,12 @@ export function WorkoutLogger({
     // End workout confirmation
     const [showEndConfirm, setShowEndConfirm] = useState(false)
 
+    // Session-close summary (set once completeWorkout returns)
+    const [sessionSummary, setSessionSummary] = useState<{
+        entries: RecalibrationSummaryEntry[]
+        durationMinutes: number
+    } | null>(null)
+
     // Performance divergence check-in (#9)
     const [divergenceNote, setDivergenceNote] = useState<string | null>(null)
 
@@ -1064,7 +1072,13 @@ export function WorkoutLogger({
                 const durationMinutes = Math.round((Date.now() - startTimeRef.current) / 60000)
                 const res = await completeWorkout(workout.id, Math.max(durationMinutes, 1))
                 if (res.success) {
-                    router.push('/dashboard')
+                    // Show what the session revealed before leaving. The
+                    // recalibration result used to be computed and discarded.
+                    setSessionSummary({
+                        entries: (res.data as { recalibration?: RecalibrationSummaryEntry[] })
+                            ?.recalibration ?? [],
+                        durationMinutes: Math.max(durationMinutes, 1),
+                    })
                 } else {
                     setError(res.error ?? "Failed to complete workout.")
                 }
@@ -1115,6 +1129,18 @@ export function WorkoutLogger({
             coaching: coachingParts.length > 0 ? coachingParts.join('\n\n') : null,
         }
     }, [workout.coach_notes])
+
+    // ─── Session complete ────────────────────────────────────────────────────
+
+    if (sessionSummary) {
+        return (
+            <SessionSummary
+                entries={sessionSummary.entries}
+                durationMinutes={sessionSummary.durationMinutes}
+                onDone={() => router.push('/dashboard')}
+            />
+        )
+    }
 
     // ─── Conditioning / Cardio / Mobility Workout (no exercise_sets) ──────────
 

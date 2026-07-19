@@ -14,6 +14,19 @@ import { createClient } from '@/lib/supabase/server'
 import { trainingMaxSkill } from '@/lib/skills/domains/strength/training-max-estimation'
 import { evaluateRecalibration } from './recalibration.actions'
 import { setTrainingMax } from './training-maxes.actions'
+import { normalizeExerciseKey } from '@/lib/training/exercise-key'
+import { estimate1RM } from '@/lib/training/methodology-helpers'
+
+/** What a completed session revealed about one main lift. */
+export interface RecalibrationSummaryEntry {
+    exercise: string
+    previousTrainingMaxKg: number
+    observedTrainingMaxKg: number
+    estimated1RMKg: number
+    /** True when the new training max was actually persisted. */
+    applied: boolean
+    isPR: boolean
+}
 
 interface TopSet {
     exercise_name: string
@@ -22,8 +35,17 @@ interface TopSet {
     actual_weight_kg: number
     actual_reps: number
     rpe_actual: number | null
+    rir_actual: number | null
+    is_amrap: boolean | null
 }
 
+/**
+ * The set that best reveals current strength: the AMRAP if there is one — its
+ * rep count is the entire point of the set — otherwise the heaviest actual load.
+ *
+ * Was max(target_weight_kg), which ignored an athlete who self-regulated up and
+ * could not distinguish a 3-rep top single from an 8-rep AMRAP at the same load.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function pickTopSet(sets: any[]): TopSet | null {
     const usable = sets.filter(
@@ -34,16 +56,20 @@ function pickTopSet(sets: any[]): TopSet | null {
             s.actual_reps != null
     )
     if (!usable.length) return null
-    // Top set = max target_weight_kg
-    return usable.reduce(
+    const amraps = usable.filter(s => s.is_amrap)
+    const pool = amraps.length ? amraps : usable
+    return pool.reduce(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (top: any, s: any) =>
-            s.target_weight_kg > (top?.target_weight_kg ?? -Infinity) ? s : top,
+            s.actual_weight_kg > (top?.actual_weight_kg ?? -Infinity) ? s : top,
         null
     )
 }
 
-export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
+export async function recalibrateFromTopSet(
+    workoutId: string
+): Promise<RecalibrationSummaryEntry[]> {
+    const summary: RecalibrationSummaryEntry[] = []
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('unauthenticated')
@@ -55,7 +81,7 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
             exercise_sets (
                 id, exercise_name, set_number,
                 target_weight_kg, target_reps,
-                actual_weight_kg, actual_reps, rpe_actual
+                actual_weight_kg, actual_reps, rpe_actual, rir_actual, is_amrap
             )
         `)
         .eq('id', workoutId)
@@ -64,9 +90,9 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
 
     if (workoutErr) {
         console.error('[recalibrateFromTopSet] workout read failed', workoutErr)
-        return
+        return summary
     }
-    if (!workout || workout.modality !== 'LIFTING') return
+    if (!workout || workout.modality !== 'LIFTING') return summary
 
     // Look up mesocycle_id + week_number from session_inventory (if linked)
     let mesocycleId: string | undefined
@@ -86,15 +112,25 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
 
     const sets = workout.exercise_sets ?? []
 
-    // Group by exercise_name, pick top set per exercise
+    // Group by canonical lift so warm-up / FSL / supplemental variants of the
+    // same movement recalibrate together instead of each writing its own max.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const byExercise = new Map<string, any[]>()
+    const byExercise = new Map<string, { label: string; sets: any[] }>()
     for (const s of sets) {
-        if (!byExercise.has(s.exercise_name)) byExercise.set(s.exercise_name, [])
-        byExercise.get(s.exercise_name)!.push(s)
+        const key = normalizeExerciseKey(s.exercise_name)
+        // Accessories carry no training max — they progress via the
+        // week-to-week loop that reads last week's actuals directly.
+        if (!key) continue
+        if (!byExercise.has(key)) {
+            byExercise.set(key, { label: s.exercise_name, sets: [] })
+        }
+        const group = byExercise.get(key)!
+        group.sets.push(s)
+        // Prefer the plainest display label ("Back Squat" over "Back Squat (FSL)").
+        if (s.exercise_name.length < group.label.length) group.label = s.exercise_name
     }
 
-    for (const [exercise, exerciseSets] of byExercise) {
+    for (const [, { label: exercise, sets: exerciseSets }] of byExercise) {
         const top = pickTopSet(exerciseSets)
         if (!top) continue
 
@@ -102,10 +138,17 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
             weightKg: top.target_weight_kg,
             reps: top.target_reps
         })
+        // The logger only ever writes rir_actual — rpe_actual is permanently
+        // null for lifting — so the estimator's effort correction was dead and
+        // 85kg x3 @ RIR 1 scored identically to the same set at RIR 4.
+        // RPE and RIR are complements on the 1-10 scale: rpe = 10 - rir.
+        const effectiveRpe =
+            top.rpe_actual ?? (top.rir_actual != null ? 10 - top.rir_actual : undefined)
+
         const observedMaxOut = trainingMaxSkill.execute({
             weightKg: top.actual_weight_kg,
             reps: top.actual_reps,
-            rpe: top.rpe_actual ?? undefined
+            rpe: effectiveRpe
         })
 
         try {
@@ -133,13 +176,16 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
             // Tiers 'visible' and 'logged' auto-apply the new TM. The
             // 'intervention' tier waits for athlete acknowledgment before
             // persisting (handled in respondToIntervention).
+            let applied = false
             if (result.tier === 'visible' || result.tier === 'logged') {
                 try {
-                    await setTrainingMax({
+                    // Returns null when the lift isn't a main lift — treat that
+                    // as "nothing recorded", not as a successful write.
+                    applied = (await setTrainingMax({
                         exercise,
                         trainingMaxKg: observedMaxOut.trainingMax,
                         source: 'recalibration'
-                    })
+                    })) !== null
                 } catch (err) {
                     console.error(
                         `[recalibrateFromTopSet] setTrainingMax failed for ${exercise}`,
@@ -147,10 +193,21 @@ export async function recalibrateFromTopSet(workoutId: string): Promise<void> {
                     )
                 }
             }
+
+            summary.push({
+                exercise,
+                previousTrainingMaxKg: previousMaxOut.trainingMax,
+                observedTrainingMaxKg: observedMaxOut.trainingMax,
+                estimated1RMKg: estimate1RM(top.actual_weight_kg, top.actual_reps),
+                applied,
+                isPR: observedMaxOut.trainingMax > previousMaxOut.trainingMax,
+            })
         } catch (err) {
             console.error(
                 `[recalibrateFromTopSet] failed for exercise ${exercise}`, err
             )
         }
     }
+
+    return summary
 }

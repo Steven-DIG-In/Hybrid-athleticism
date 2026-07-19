@@ -15,6 +15,7 @@ import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
 import { advanceBlockPointer } from './block-pointer.actions'
 import { recalibrateFromTopSet } from './recalibrate-from-top-set.actions'
+import type { RecalibrationSummaryEntry } from './recalibrate-from-top-set.actions'
 import { fireBlockEndInterventions } from '@/lib/interventions/block-end-trigger'
 import { evaluateAndFirePattern } from '@/lib/interventions/rolling-pattern-trigger'
 import { modalityToCoachDomain } from '@/lib/analytics/shared/coach-domain'
@@ -324,15 +325,19 @@ export async function completeWorkout(
         }
     }
 
-    // Non-blocking: recalibration signal via agent_activity and interventions.
-    // Next-session prescription weights are NOT auto-updated (Phase 2.5).
-    recalibrateFromTopSet(workoutId).catch(err => {
+    // Awaited (was fire-and-forget) so the session-close summary can report the
+    // new estimated 1RM. Still non-fatal: a recalibration failure must never
+    // block the athlete from finishing a session.
+    let recalibration: RecalibrationSummaryEntry[] = []
+    try {
+        recalibration = await recalibrateFromTopSet(workoutId)
+    } catch (err) {
         console.error('[completeWorkout] recalibration failed:', err)
-    })
+    }
 
     revalidatePath('/dashboard')
     revalidatePath('/workout')
-    return { success: true, data: workout }
+    return { success: true, data: { ...workout, recalibration } }
 }
 
 /**
