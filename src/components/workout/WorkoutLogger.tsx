@@ -26,6 +26,40 @@ import {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Find the first exercise index that has at least one incomplete set */
+/**
+ * Next-set weight suggestion.
+ *
+ * THE PRESCRIPTION ALWAYS WINS. If generation gave this set a weight, we show
+ * that weight — full stop.
+ *
+ * This function's ancestor overwrote the next set's target with
+ * `previous actual ± RIR nudge`, which silently destroyed every fixed-percentage
+ * ramp: a 5/3/1 wave of 65 → 75 → 85 became 65 → 65 → 65, and the athlete had to
+ * hand-correct the load on every single set. Worse, it poisoned the week-to-week
+ * feedback loop — next week's prescription is generated from last week's ACTUALS,
+ * so an accepted bad suggestion fed a regression forward into the program.
+ *
+ * The RIR nudge (a double-progression rule) survives only for sets that
+ * generation left unprescribed, where there is nothing to override.
+ */
+export function suggestNextSetWeight(input: {
+    nextTargetWeightKg: number | null
+    previousActualWeightKg: number
+    actualRir: number
+    targetRir: number
+}): number | null {
+    if (input.nextTargetWeightKg != null) return null
+
+    const rirDiff = input.actualRir - input.targetRir
+    let suggested = input.previousActualWeightKg
+    if (rirDiff >= 2) suggested += 5
+    else if (rirDiff >= 1) suggested += 2.5
+    else if (rirDiff <= -2) suggested -= 5
+    else if (rirDiff <= -1) suggested -= 2.5
+
+    return Math.max(0, suggested)
+}
+
 function findFirstIncompleteIdx(exerciseNames: string[], sets: ExerciseSet[]): number {
     const idx = exerciseNames.findIndex(name => {
         const exerciseSets = sets.filter(s => s.exercise_name === name)
@@ -908,7 +942,8 @@ export function WorkoutLogger({
                         // Show rest timer
                         setRestTimerSeconds(suggestRestSeconds(set.target_reps, set.target_rir))
 
-                        // Auto-suggest next set weight based on RIR feedback (Issue #11)
+                        // Auto-suggest next set weight (Issue #11) — only for sets
+                        // generation left unprescribed. See suggestNextSetWeight.
                         const sameSets = workout.exercise_sets
                             .filter(s => s.exercise_name === set.exercise_name)
                             .sort((a, b) => a.set_number - b.set_number)
@@ -916,28 +951,22 @@ export function WorkoutLogger({
                             s.set_number > set.set_number && s.actual_reps === null
                         )
                         if (nextSet) {
-                            const actualWeight = parseFloat(values.weight) || 0
-                            const actualRir = values.rir
-                            const targetRir = set.target_rir ?? 2
-                            const rirDiff = actualRir - targetRir
-
-                            // Adjust weight: +2.5kg per RIR above target, -2.5kg per RIR below
-                            let suggestedWeight = actualWeight
-                            if (rirDiff >= 2) suggestedWeight += 5
-                            else if (rirDiff >= 1) suggestedWeight += 2.5
-                            else if (rirDiff <= -2) suggestedWeight -= 5
-                            else if (rirDiff <= -1) suggestedWeight -= 2.5
-
-                            suggestedWeight = Math.max(0, suggestedWeight)
-
-                            setLocalSets(prev => ({
-                                ...prev,
-                                [nextSet.id]: {
-                                    ...prev[nextSet.id],
-                                    weight: suggestedWeight.toString(),
-                                    reps: prev[nextSet.id]?.reps ?? values.reps,
-                                }
-                            }))
+                            const suggested = suggestNextSetWeight({
+                                nextTargetWeightKg: nextSet.target_weight_kg,
+                                previousActualWeightKg: parseFloat(values.weight) || 0,
+                                actualRir: values.rir,
+                                targetRir: set.target_rir ?? 2,
+                            })
+                            if (suggested !== null) {
+                                setLocalSets(prev => ({
+                                    ...prev,
+                                    [nextSet.id]: {
+                                        ...prev[nextSet.id],
+                                        weight: suggested.toString(),
+                                        reps: prev[nextSet.id]?.reps ?? values.reps,
+                                    }
+                                }))
+                            }
                         }
 
                         // Check if all sets for this exercise are now complete (Issue #2)
