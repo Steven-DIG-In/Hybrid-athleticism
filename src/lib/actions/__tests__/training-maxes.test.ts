@@ -71,10 +71,13 @@ describe('training-maxes persistence', () => {
         expect(entry?.source).toBe('recalibration')
     })
 
-    it('setTrainingMax writes through to recordCapability', async () => {
+    it('setTrainingMax writes through to recordCapability under a registry-resolvable label', async () => {
+        // The label is derived from the canonical key, not the caller's display
+        // name: passing raw exercise names meant recordCapability rejected most
+        // writes as unmapped, so Layer-1 capabilities never recalibrated.
         await setTrainingMax({ exercise: 'Squat', trainingMaxKg: 132.5, source: 'recalibration' })
         expect(recordCapability).toHaveBeenCalledWith(
-            expect.objectContaining({ name: 'Squat', value: 132.5, source: 'recalibration' })
+            expect.objectContaining({ name: 'back squat', value: 132.5, source: 'recalibration' })
         )
     })
 })

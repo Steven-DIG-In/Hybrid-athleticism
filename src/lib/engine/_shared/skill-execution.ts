@@ -107,6 +107,10 @@ export async function buildSkillInput(
                 const tm = await resolveTrainingMaxForExercise(
                     exerciseName, benchmarks[0].value, repCount
                 )
+                // A benchmark is present here, so resolve never returns null —
+                // but the signature allows it, and a 5/3/1 wave off a null TM
+                // would be nonsense. Skip the skill rather than invent a number.
+                if (tm == null) return undefined
                 return {
                     trainingMaxKg: tm,
                     week: ctx.weekNumber <= 4 ? ctx.weekNumber : ((ctx.weekNumber - 1) % 4) + 1,

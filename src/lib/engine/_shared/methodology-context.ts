@@ -81,14 +81,18 @@ export async function buildMethodologyContext(
             const bm = benchmarks.find(b =>
                 keywords.some(kw => b.benchmark_name.toLowerCase().includes(kw))
             )
-            if (bm) {
-                const tm = await resolveTrainingMaxForExercise(displayName, bm.value, 1)
-                const wave = calculate531Wave(tm, weekInCycle)
-                const setsStr = wave.sets.map(s =>
-                    `${s.reps}${s.isAmrap ? '+' : ''} @ ${s.weightKg}kg (${Math.round(s.percentTM * 100)}%TM)`
-                ).join(', ')
-                lines.push(`  ${displayName} (TM: ${tm}kg): ${wave.weekLabel} — ${setsStr}`)
-            }
+            // A stored training max is authoritative and must not require a
+            // benchmark row to exist — recalibration keeps it fresher than
+            // onboarding ever was. Previously the whole lift was skipped when
+            // no benchmark matched, even with a valid recalibrated TM on file.
+            const tm = await resolveTrainingMaxForExercise(displayName, bm?.value ?? null, 1)
+            if (tm == null) continue
+
+            const wave = calculate531Wave(tm, weekInCycle)
+            const setsStr = wave.sets.map(s =>
+                `${s.reps}${s.isAmrap ? '+' : ''} @ ${s.weightKg}kg (${Math.round(s.percentTM * 100)}%TM)`
+            ).join(', ')
+            lines.push(`  ${displayName} (TM: ${tm}kg): ${wave.weekLabel} — ${setsStr}`)
         }
         if (lines.length > 0) {
             ctx.liftingProtocol = `5/3/1 Cycle Week ${weekInCycle}${isDeload && weekInCycle === 4 ? ' (DELOAD)' : ''}:\n${lines.join('\n')}`

@@ -266,10 +266,12 @@ describe('Training loop integration', () => {
             )
             expect(recalibRow.reasoning_structured.tier).toBe('logged')
 
-            // 5. Training max persisted to profile
+            // 5. Training max persisted to profile under the canonical lift key
+            // ('Back Squat' normalizes to 'back_squat'), which is what the
+            // generation readers look up.
             const profile = state.profiles.get('u1')
-            expect(profile.training_maxes['Back Squat']).toBeDefined()
-            expect(profile.training_maxes['Back Squat'].source).toBe('recalibration')
+            expect(profile.training_maxes['back_squat']).toBeDefined()
+            expect(profile.training_maxes['back_squat'].source).toBe('recalibration')
         },
         10000
     )

@@ -68,18 +68,31 @@ export const estimateTrainingMax = (
 
 /**
  * Resolve a training max for a given exercise, preferring the
- * stored `profiles.training_maxes[exerciseName]` written by the
- * recalibration flow, and falling back to the benchmark-derived
- * estimate (`estimateTrainingMax`) when no stored value exists.
+ * stored `profiles.training_maxes` entry written by the recalibration
+ * flow, and falling back to the benchmark-derived estimate
+ * (`estimateTrainingMax`) when no stored value exists.
+ *
+ * The lookup normalizes the exercise name internally (see
+ * `src/lib/training/exercise-key.ts`), so 'Squat', 'Back Squat' and
+ * 'Back Squat (FSL)' all resolve to the same stored max.
+ *
+ * Pass `benchmarkWeight: null` when the athlete has no benchmark row for
+ * this lift. A stored TM does NOT require a benchmark to exist —
+ * recalibration keeps it fresher than onboarding ever was — so the two
+ * are independent. Returns null only when neither source has a value, and
+ * callers should skip the lift entirely in that case.
+ *
+ * Never throws: a failed lookup degrades to the benchmark estimate rather
+ * than taking down week generation.
  *
  * Async because the stored lookup hits Supabase. Callers in sync
  * paths should continue to use `estimateTrainingMax` directly.
  */
 export const resolveTrainingMaxForExercise = async (
     exerciseName: string,
-    benchmarkWeight: number,
+    benchmarkWeight: number | null,
     benchmarkReps: number,
-): Promise<number> => {
+): Promise<number | null> => {
     try {
         const stored = await getTrainingMax(exerciseName)
         if (stored) return stored.trainingMaxKg
@@ -89,6 +102,7 @@ export const resolveTrainingMaxForExercise = async (
             err
         )
     }
+    if (benchmarkWeight == null) return null
     return estimateTrainingMax(benchmarkWeight, benchmarkReps)
 }
 

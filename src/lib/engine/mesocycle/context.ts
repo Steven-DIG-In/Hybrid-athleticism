@@ -13,7 +13,6 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
-import { trainingMaxFromCapability } from '@/core/domains/strength/training-max'
 import type { StrengthCapability } from '@/lib/types/athlete-state.types'
 import type { ActionResult, WorkoutWithSets } from '@/lib/types/training.types'
 import type { AthleteBenchmark } from '@/lib/types/database.types'
@@ -348,7 +347,10 @@ export async function buildStrengthMethodologyContext(
     weekNumber: number,
     totalWeeks: number,
     isDeload: boolean,
-    capabilities: StrengthCapability[] = [],
+    // Retained for call-site compatibility. No longer read: capabilities are a
+    // write-through mirror of profiles.training_maxes, so the stored TM (which
+    // this function now reads directly) is the single source of truth.
+    _capabilities: StrengthCapability[] = [],
 ): Promise<MethodologyContext | undefined> {
     const ctx: MethodologyContext = {}
     const strengthMethod = profile.strength_methodology ?? 'ai_decides'
@@ -364,17 +366,16 @@ export async function buildStrengthMethodologyContext(
             ['OHP', 'overhead_press', ['ohp', 'overhead_press', 'overhead']],
         ]
         const lines: string[] = []
-        for (const [displayName, capKey, keywords] of liftMap) {
-            const cap = capabilities.find(c => c.key === capKey)
-            let tm: number | null = null
-            if (cap) {
-                tm = trainingMaxFromCapability(cap)
-            } else {
-                const bm = benchmarks.find(b =>
-                    keywords.some(kw => b.benchmark_name.toLowerCase().includes(kw))
-                )
-                if (bm) tm = await resolveTrainingMaxForExercise(displayName, bm.value, 1)
-            }
+        for (const [displayName, , keywords] of liftMap) {
+            // Precedence is intentionally identical to buildMethodologyContext:
+            // stored training max → onboarding benchmark estimate → skip the lift.
+            // Capabilities are a write-through mirror of training_maxes (see
+            // setTrainingMax), not an independent source, so reading them here
+            // would only reintroduce the drift this change removes.
+            const bm = benchmarks.find(b =>
+                keywords.some(kw => b.benchmark_name.toLowerCase().includes(kw))
+            )
+            const tm = await resolveTrainingMaxForExercise(displayName, bm?.value ?? null, 1)
             if (tm !== null) {
                 const wave = calculate531Wave(tm, weekInCycle)
                 const setsStr = wave.sets.map(s =>
