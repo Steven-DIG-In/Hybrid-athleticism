@@ -4,6 +4,7 @@ import type { WorkoutWithSets } from "@/lib/types/training.types"
 import { AlertTriangle } from "lucide-react"
 import { WorkoutLogger } from "@/components/workout/WorkoutLogger"
 import { createClient } from "@/lib/supabase/server"
+import { getTrainingMax } from "@/lib/actions/training-maxes.actions"
 
 export default async function ActiveWorkoutPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -48,11 +49,29 @@ export default async function ActiveWorkoutPage({ params }: { params: Promise<{ 
         }
     }
 
+    // Training maxes for the %TM display, keyed by the raw exercise_name the
+    // logger renders. getTrainingMax normalizes internally and returns null for
+    // accessories, which the logger then renders without a percentage.
+    const workout = result.data as WorkoutWithSets
+    const exerciseNames = Array.from(
+        new Set((workout.exercise_sets ?? []).map(s => s.exercise_name))
+    )
+    const trainingMaxes: Record<string, number> = {}
+    await Promise.all(exerciseNames.map(async name => {
+        try {
+            const tm = await getTrainingMax(name)
+            if (tm) trainingMaxes[name] = tm.trainingMaxKg
+        } catch {
+            // A missing TM only costs the percentage display — never block logging.
+        }
+    }))
+
     return (
         <WorkoutLogger
-            workout={result.data as WorkoutWithSets}
+            workout={workout}
             displayWeightsAsPercentages={displayWeightsAsPercentages}
             recalibrationNote={recalibrationNote}
+            trainingMaxes={trainingMaxes}
         />
     )
 }

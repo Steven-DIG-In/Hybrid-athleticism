@@ -60,6 +60,23 @@ export function suggestNextSetWeight(input: {
     return Math.max(0, suggested)
 }
 
+/**
+ * Summarise a prescribed target across an exercise's sets.
+ *
+ * Straight sets collapse to a single value; a ramp renders as a range, so the
+ * headline tile can never again present the lightest rung as "the" load.
+ */
+export function formatTargetRange(
+    values: Array<number | null>,
+    suffix: string
+): string {
+    const present = values.filter((v): v is number => v != null && v > 0)
+    if (present.length === 0) return `--${suffix}`
+    const lo = Math.min(...present)
+    const hi = Math.max(...present)
+    return lo === hi ? `${lo}${suffix}` : `${lo}–${hi}${suffix}`
+}
+
 function findFirstIncompleteIdx(exerciseNames: string[], sets: ExerciseSet[]): number {
     const idx = exerciseNames.findIndex(name => {
         const exerciseSets = sets.filter(s => s.exercise_name === name)
@@ -763,7 +780,8 @@ function ConditioningLogger({
 export function WorkoutLogger({
     workout,
     displayWeightsAsPercentages = false,
-    recalibrationNote = null
+    recalibrationNote = null,
+    trainingMaxes = {}
 }: {
     workout: WorkoutWithSets
     displayWeightsAsPercentages?: boolean
@@ -771,6 +789,8 @@ export function WorkoutLogger({
         reasoningText: string
         createdAt: string
     } | null
+    /** Training max per exercise_name, for the %TM display. Absent = no percentage. */
+    trainingMaxes?: Record<string, number>
 }) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
@@ -842,22 +862,21 @@ export function WorkoutLogger({
     const totalSets = workout.exercise_sets.length
     const divergence = detectPerformanceDivergence(workout.exercise_sets)
 
-    // Working max calculation for percentage display (Issue #3)
-    const workingMaxData = useMemo(() => {
-        if (!displayWeightsAsPercentages || isBW) return null
-
-        const weights = activeSets
-            .map(s => s.target_weight_kg)
-            .filter((w): w is number => w !== null && w > 0)
-
-        if (weights.length === 0) return null
-
-        const workingMax = Math.max(...weights)
-        // Estimate 1RM from working max (assume it's around 3-5 reps range, use 4 as middle)
-        const estimated1RM = estimate1RM(workingMax, 4)
-
-        return { workingMax, estimated1RM }
-    }, [displayWeightsAsPercentages, activeSets, isBW])
+    // Percentage is of the TRAINING MAX, not of the heaviest stored set.
+    //
+    // The old version took max(target_weight_kg) across the exercise and called
+    // it a "working max", so a 65/75/85 ramp rendered 76%/88%/100% instead of
+    // 70%/80%/90%, and a flat block always rendered 100% — the number could
+    // never be wrong in a way you'd notice, and never right either. It also ran
+    // estimate1RM(workingMax, 4) on a hardcoded 4 reps, a second e1RM path that
+    // disagreed with trainingMaxSkill.
+    const trainingMaxKg = isBW ? null : (trainingMaxes[currentExerciseName] ?? null)
+    // TM is 90% of 1RM by definition (see training-max-estimation skill).
+    const estimated1RM = useMemo(
+        () => (trainingMaxKg ? Math.round((trainingMaxKg / 0.9) * 10) / 10 : null),
+        [trainingMaxKg]
+    )
+    const showPercentages = displayWeightsAsPercentages && trainingMaxKg !== null
 
     // Clear error after 5 seconds
     useEffect(() => {
@@ -1402,20 +1421,20 @@ export function WorkoutLogger({
                     {currentExerciseName}
                 </h1>
 
-                {/* Working Max Display (when percentage mode enabled) */}
-                {workingMaxData && (
+                {/* Training max the percentages are derived from */}
+                {showPercentages && (
                     <div className="mb-4 p-3 bg-cyan-950/20 border border-cyan-900/30 rounded-md">
                         <div className="flex justify-between items-center">
                             <div>
-                                <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest">Working Max</span>
+                                <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest">Training Max</span>
                                 <p className="text-2xl font-space-grotesk font-bold text-cyan-300">
-                                    {workingMaxData.workingMax}kg
+                                    {trainingMaxKg}kg
                                 </p>
                             </div>
                             <div className="text-right">
                                 <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest">Est. 1RM</span>
                                 <p className="text-lg font-space-grotesk font-semibold text-neutral-400">
-                                    {workingMaxData.estimated1RM}kg
+                                    {estimated1RM}kg
                                 </p>
                             </div>
                         </div>
@@ -1423,16 +1442,19 @@ export function WorkoutLogger({
                 )}
 
                 <div className="flex gap-4 mb-4">
+                    {/* Ranges, not activeSets[0]. These tiles used to show the
+                        FIRST set only, so a 65/75/85 ramp headlined as "65 kg" —
+                        the lightest rung presented as the load for the exercise. */}
                     <div className="flex-1 bg-[#0a0a0a] border border-[#222222] p-3 text-center">
                         <span className="block text-[10px] font-mono text-neutral-500 mb-1">TARGET REPS</span>
                         <span className="text-lg font-space-grotesk font-bold">
-                            {currentExerciseData?.target_reps}
+                            {formatTargetRange(activeSets.map(s => s.target_reps), '')}
                         </span>
                     </div>
                     <div className="flex-1 bg-[#0a0a0a] border border-[#222222] p-3 text-center">
                         <span className="block text-[10px] font-mono text-neutral-500 mb-1">TARGET LOAD</span>
                         <span className="text-lg font-space-grotesk font-bold">
-                            {currentExerciseData?.target_weight_kg || "--"} kg
+                            {formatTargetRange(activeSets.map(s => s.target_weight_kg), ' kg')}
                         </span>
                     </div>
                     {currentTempo && (
@@ -1510,17 +1532,32 @@ export function WorkoutLogger({
                                 key={set.id}
                                 className={`border transition-all duration-300 ${isCompleted
                                     ? 'border-cyan-500/50 bg-[#050505]'
-                                    : 'border-[#333333] bg-[#0c0c0c]'
+                                    : set.is_amrap
+                                        ? 'border-amber-500/50 bg-[#0c0a06]'
+                                        : 'border-[#333333] bg-[#0c0c0c]'
                                     } p-4`}
                             >
+                                {/* The 5/3/1 "+" set. target_reps is a floor, not a cap —
+                                    without this the top set read as a flat rep target. */}
+                                {set.is_amrap && !isCompleted && (
+                                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                                        <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold text-amber-400
+                                                         border border-amber-400/50 bg-amber-400/10 tracking-widest">
+                                            {set.target_reps}+ MAX EFFORT
+                                        </span>
+                                        <span className="text-[10px] font-mono text-amber-500/70">
+                                            push past {set.target_reps} — this set sets your next training max
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-4 mb-4">
                                     <div className="flex-shrink-0 w-14 text-center">
                                         <div className="text-sm font-mono text-neutral-500">
                                             {set.set_number}
                                         </div>
-                                        {workingMaxData && set.target_weight_kg && (
+                                        {showPercentages && set.target_weight_kg && (
                                             <div className="text-[10px] font-mono text-cyan-400">
-                                                {Math.round((set.target_weight_kg / workingMaxData.workingMax) * 100)}%
+                                                {Math.round((set.target_weight_kg / trainingMaxKg!) * 100)}%
                                             </div>
                                         )}
                                     </div>
