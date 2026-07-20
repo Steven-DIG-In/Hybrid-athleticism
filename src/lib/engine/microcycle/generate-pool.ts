@@ -114,6 +114,21 @@ export async function generateSessionPool(
             .eq('user_id', user.id),
     ])
 
+    // A failed read must NOT look like "no injuries, no benchmarks". `?? []`
+    // made those indistinguishable, so a transient query failure would prompt
+    // both the programming engine and the head coach as though the athlete were
+    // uninjured with no 1RMs — i.e. load an injured joint and guess the weights.
+    // Refuse to generate rather than generate blind.
+    if (injuriesResult.error) {
+        return { success: false, error: `Could not read injuries: ${injuriesResult.error.message}` }
+    }
+    if (benchmarksResult.error) {
+        return { success: false, error: `Could not read benchmarks: ${benchmarksResult.error.message}` }
+    }
+    if (recentTrainingResult.error) {
+        console.error('[generateSessionPool] recent_training_activity read failed', recentTrainingResult.error)
+    }
+
     const injuries = injuriesResult.data ?? []
     const benchmarks = benchmarksResult.data ?? []
     const recentTraining = recentTrainingResult.data ?? []
@@ -414,11 +429,18 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
 
     // ─── Step 7: Delete existing workouts for this microcycle (re-generation) ─
     // This allows regeneration — delete old workouts + sets before inserting new ones
-    const { data: existingWorkouts } = await supabase
+    const { data: existingWorkouts, error: existingErr } = await supabase
         .from('workouts')
         .select('id')
         .eq('microcycle_id', microcycleId)
         .eq('user_id', user.id)
+
+    // Unchecked, a failed read skipped the cleanup below and the new pool was
+    // inserted ON TOP of the old one — a week showing roughly double the
+    // sessions, mixed old and new. Reached directly via regenerateCurrentWeekPool.
+    if (existingErr) {
+        return { success: false, error: `Could not check existing workouts: ${existingErr.message}` }
+    }
 
     if (existingWorkouts && existingWorkouts.length > 0) {
         const existingIds = existingWorkouts.map(w => w.id)
@@ -493,9 +515,17 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
 
         createdWorkouts.push(workout)
 
-        // Insert exercise_sets for LIFTING sessions
+        // Insert exercise_sets for LIFTING sessions. A lifting workout with no
+        // sets is not a session — fail the whole generation rather than hand the
+        // athlete an empty one.
         if (session.modality === 'LIFTING') {
-            await insertLiftingSets(supabase, workout.id, user.id, session)
+            const setsResult = await insertLiftingSets(supabase, workout.id, user.id, session)
+            if (!setsResult.ok) {
+                return {
+                    success: false,
+                    error: `Could not write exercises for "${session.name}": ${setsResult.error}`,
+                }
+            }
         }
     }
 

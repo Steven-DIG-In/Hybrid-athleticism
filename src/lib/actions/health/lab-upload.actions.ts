@@ -61,7 +61,9 @@ export async function uploadLabPDF(formData: FormData): Promise<UploadResult> {
 
   const outOfRangeCount = ext.data.markers.filter((m) => m.is_out_of_range).length
 
-  await supabase
+  // Discarded, a failed update left the panel stuck in 'processing' forever
+  // while the upload reported success.
+  const { error: panelErr } = await supabase
     .from('lab_panels')
     .update({
       panel_date: ext.data.panel_date!,
@@ -71,6 +73,9 @@ export async function uploadLabPDF(formData: FormData): Promise<UploadResult> {
       out_of_range_count: outOfRangeCount,
     })
     .eq('id', panel.id)
+  if (panelErr) {
+    return { ok: false, error: `Could not save the extracted panel: ${panelErr.message}` }
+  }
 
   const markerRows = ext.data.markers.map((m) => ({
     panel_id: panel.id,
@@ -87,7 +92,11 @@ export async function uploadLabPDF(formData: FormData): Promise<UploadResult> {
     notes: m.notes,
   }))
   if (markerRows.length > 0) {
-    await supabase.from('lab_markers').insert(markerRows)
+    // Discarded, this produced a panel marked 'needs_review' with zero markers.
+    const { error: markerErr } = await supabase.from('lab_markers').insert(markerRows)
+    if (markerErr) {
+      return { ok: false, error: `Could not save lab markers: ${markerErr.message}` }
+    }
   }
 
   revalidatePath('/data/health/bloodwork')

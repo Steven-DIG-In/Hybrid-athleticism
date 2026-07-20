@@ -132,7 +132,7 @@ export async function insertLiftingSets(
     workoutId: string,
     userId: string,
     session: LiftingSession
-): Promise<void> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
     const rows: Array<{
         workout_id: string
         user_id: string
@@ -169,6 +169,11 @@ export async function insertLiftingSets(
         const { error } = await supabase.from('exercise_sets').insert(rows)
         if (error) {
             console.error(`[insertLiftingSets] Failed for workout ${workoutId}:`, error)
+            // Returned void and swallowed this, so generation reported success
+            // with the workout created — the athlete got a session that opened
+            // in the logger with zero exercises and no error anywhere.
+            return { ok: false, error: error.message }
         }
     }
+    return { ok: true }
 }

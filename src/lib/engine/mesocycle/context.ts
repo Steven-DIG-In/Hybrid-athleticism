@@ -118,6 +118,16 @@ export async function buildAthleteContext(
         supabase.from('recent_training_activity').select('*').eq('user_id', userId),
     ])
 
+    // See generate-pool.ts: `?? []` made a failed read indistinguishable from an
+    // uninjured athlete with no benchmarks. Throw rather than build a context
+    // that silently omits injuries.
+    if (injuriesResult.error) {
+        throw new Error(`Could not read injuries: ${injuriesResult.error.message}`)
+    }
+    if (benchmarksResult.error) {
+        throw new Error(`Could not read benchmarks: ${benchmarksResult.error.message}`)
+    }
+
     const injuries = injuriesResult.data ?? []
     const benchmarks = deduplicateBenchmarks(benchmarksResult.data ?? [])
     const recentTraining = recentTrainingResult.data ?? []

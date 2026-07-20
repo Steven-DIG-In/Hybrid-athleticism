@@ -30,12 +30,21 @@ export async function runHeadCoachStrategy(
     if (authError || !user) return { success: false, error: 'Not authenticated' }
 
     // Read wizard input from ai_context_json (written by createBlockShell)
-    const { data: mesoRow } = await supabase
+    const { data: mesoRow, error: mesoErr } = await supabase
         .from('mesocycles')
         .select('ai_context_json')
         .eq('id', mesocycleId)
         .eq('user_id', user.id)
         .single()
+
+    // On a failed read this defaulted to {} — the head-coach prompt lost the
+    // archetype, session counts and carryover just entered in the wizard, AND
+    // the write-back below (`{ ...aiCtx, strategy }`) erased those fields from
+    // the database. Same shape as the `...(typeof x === 'object' ? {} : {})`
+    // no-op spread fixed in May.
+    if (mesoErr) {
+        return { success: false, error: `Could not read block context: ${mesoErr.message}` }
+    }
 
     const aiCtx = (mesoRow?.ai_context_json ?? {}) as Record<string, unknown>
 

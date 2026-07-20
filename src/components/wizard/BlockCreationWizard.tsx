@@ -7,10 +7,10 @@ import type { PendingPlannerNotes } from '@/lib/types/pending-planner-notes.type
 import type { MesocycleStrategyValidated } from '@/lib/ai/schemas/week-brief'
 import type { CoachDomain } from '@/lib/skills/types'
 import { type Archetype, ARCHETYPE_LABELS } from '@/lib/wizard/archetypes'
-import { createBlockShell } from '@/lib/engine/mesocycle/create-shell'
+import { createBlockShell, updateBlockShellContext } from '@/lib/engine/mesocycle/create-shell'
 import { discardOrphanBlock, type OrphanBlock } from '@/lib/engine/mesocycle/find-orphan'
 import { runHeadCoachStrategy } from '@/lib/engine/mesocycle/strategy-generation'
-import { generateMesocycleInventory } from '@/lib/actions/inventory-generation.actions'
+import { generateMesocycleInventory, regenerateWeekInventory } from '@/lib/actions/inventory-generation.actions'
 import { regenerateBlockPlan } from '@/lib/engine/mesocycle/regenerate'
 import { approveBlockPlan } from '@/lib/engine/mesocycle/approve'
 import { loadWeek1Preview, type Week1PreviewSession } from '@/lib/engine/mesocycle/load-week1-preview'
@@ -89,6 +89,7 @@ export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: Blo
     setGenStage('strategy')
 
     // 1) createBlockShell (skip if already created — supports Edit/Regenerate flow)
+    const isRegeneration = Boolean(mesocycleId)
     let mid = mesocycleId
     if (!mid) {
       const shellResult = await createBlockShell({
@@ -106,6 +107,23 @@ export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: Blo
       }
       mid = shellResult.data.mesocycleId
       setMesocycleId(mid)
+    } else {
+      // Edit/Regenerate flow: the shell already exists, so the wizard inputs
+      // the athlete just changed have to be written to it explicitly.
+      // Without this the head coach planned from the ORIGINAL archetype.
+      const updateResult = await updateBlockShellContext(mid, {
+        mode,
+        archetype,
+        customCounts: archetype === 'custom' ? customCounts : undefined,
+        durationWeeks,
+        carryover,
+      })
+      if (!updateResult.success) {
+        setError(updateResult.error)
+        setStep('review')
+        setSubmitting(false)
+        return
+      }
     }
 
     // 2) runHeadCoachStrategy
@@ -120,7 +138,12 @@ export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: Blo
 
     // 3) generate week 1 inventory (writes to session_inventory)
     setGenStage('week1')
-    const inventoryResult = await generateMesocycleInventory(mid, 1)
+    // On the Edit/Regenerate pass the week already has inventory, and the
+    // plain generate path would no-op on its idempotency guard and hand back
+    // the previous archetype's sessions. Regenerate replaces them instead.
+    const inventoryResult = isRegeneration
+        ? await regenerateWeekInventory(mid, 1)
+        : await generateMesocycleInventory(mid, 1)
     if (!inventoryResult.success) {
       setError(inventoryResult.error)
       setStep('review')

@@ -38,6 +38,9 @@ async function convertWorkoutsToInventory(
 ): Promise<{ inserted: number; errors: string[] }> {
     let inserted = 0
     const errors: string[] = []
+    // Only workouts whose prescription made it into session_inventory are safe
+    // to delete. Anything that failed keeps its source rows.
+    const convertedWorkoutIds: string[] = []
 
     for (const workout of workouts) {
         let exercisePrescription = null
@@ -46,11 +49,22 @@ async function convertWorkoutsToInventory(
             endurancePrescription = (workout as { endurance_prescription?: Json | null }).endurance_prescription ?? null
         }
         if (workout.modality === 'LIFTING') {
-            const { data: sets } = await supabase
+            const { data: sets, error: setsError } = await supabase
                 .from('exercise_sets')
                 .select('*')
                 .eq('workout_id', workout.id)
                 .order('set_number', { ascending: true })
+
+            // This read feeds `adjustment_pending.prescription`, and the temp
+            // workouts + their sets are deleted unconditionally at the end of
+            // this function. An unchecked failure here therefore wrote an
+            // inventory row with a null prescription and then destroyed the only
+            // remaining copy — an empty lifting session, unrecoverable, reported
+            // as a successful week. Abort instead so the source rows survive.
+            if (setsError) {
+                errors.push(`${workout.name}: could not read prescription — ${setsError.message}`)
+                continue
+            }
 
             if (sets && sets.length > 0) {
                 const exerciseMap = new Map<string, {
@@ -114,14 +128,22 @@ async function convertWorkoutsToInventory(
             errors.push(`${workout.name}: ${insertError.message}`)
         } else {
             inserted++
+            convertedWorkoutIds.push(workout.id)
         }
     }
 
-    // Delete the temporary workouts (we only wanted the session data)
-    const workoutIds = workouts.map(w => w.id)
-    if (workoutIds.length > 0) {
-        await supabase.from('exercise_sets').delete().in('workout_id', workoutIds)
-        await supabase.from('workouts').delete().in('id', workoutIds).eq('user_id', userId)
+    // Delete the temporary workouts — but ONLY the ones whose prescription was
+    // successfully copied into session_inventory. Deleting unconditionally
+    // destroyed the source of any session that failed to convert, turning a
+    // recoverable error into permanent data loss.
+    if (convertedWorkoutIds.length > 0) {
+        const { error: setDelErr } = await supabase
+            .from('exercise_sets').delete().in('workout_id', convertedWorkoutIds)
+        if (setDelErr) errors.push(`temp set cleanup: ${setDelErr.message}`)
+
+        const { error: woDelErr } = await supabase
+            .from('workouts').delete().in('id', convertedWorkoutIds).eq('user_id', userId)
+        if (woDelErr) errors.push(`temp workout cleanup: ${woDelErr.message}`)
     }
 
     return { inserted, errors }

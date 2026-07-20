@@ -35,13 +35,20 @@ export async function regenerateBlockPlan(
     if (clearErr) return { success: false, error: `Strategy clear failed: ${clearErr.message}` }
 
     // Find week 1 microcycle (still needed for any per-week microcycle metadata operations)
-    const { data: week1Micro } = await supabase
+    const { data: week1Micro, error: week1Err } = await supabase
         .from('microcycles')
         .select('id, week_number')
         .eq('mesocycle_id', mesocycleId)
         .eq('week_number', 1)
         .eq('user_id', user.id)
         .single()
+
+    // Unchecked, a failed read skipped the delete below, the non-forced
+    // generation then short-circuited on its idempotency guard, and
+    // regenerateBlockPlan returned success having produced the exact same week.
+    if (week1Err || !week1Micro) {
+        return { success: false, error: week1Err?.message ?? 'Week 1 microcycle not found' }
+    }
 
     // Delete week 1 inventory (correct schema: keyed by mesocycle_id + week_number, not microcycle_id)
     if (week1Micro) {

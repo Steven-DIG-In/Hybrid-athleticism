@@ -101,3 +101,53 @@ export async function createBlockShell(
     revalidatePath('/data/blocks/new')
     return { success: true, data: { mesocycleId: meso.id } }
 }
+
+/**
+ * Rewrite an existing block shell's wizard inputs.
+ *
+ * The wizard's Edit/Regenerate flow keeps the mesocycle it already created and
+ * skips `createBlockShell` on the second pass. Without this, a changed
+ * archetype / session count / carryover was never written to
+ * `ai_context_json`, and the non-forced week-1 generation then short-circuited
+ * on its idempotency guard and returned the ORIGINAL pool — so the athlete saw
+ * a fresh-looking strategy above the previous block's sessions, approved it,
+ * and trained the wrong plan.
+ *
+ * Preserves any keys not owned by the wizard (notably `strategy`, which
+ * `runHeadCoachStrategy` writes).
+ */
+export async function updateBlockShellContext(
+    mesocycleId: string,
+    input: CreateBlockShellInput,
+): Promise<ActionResult<null>> {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return { success: false, error: 'Not authenticated' }
+
+    const { data: row, error: readErr } = await supabase
+        .from('mesocycles')
+        .select('ai_context_json')
+        .eq('id', mesocycleId)
+        .eq('user_id', user.id)
+        .single()
+    if (readErr) return { success: false, error: readErr.message }
+
+    const current = (row?.ai_context_json ?? {}) as Record<string, unknown>
+
+    const { error: writeErr } = await supabase
+        .from('mesocycles')
+        .update({
+            ai_context_json: {
+                ...current,
+                archetype: input.archetype,
+                customCounts: input.customCounts ?? null,
+                carryover: input.carryover,
+                mode: input.mode,
+            },
+        })
+        .eq('id', mesocycleId)
+        .eq('user_id', user.id)
+    if (writeErr) return { success: false, error: writeErr.message }
+
+    return { success: true, data: null }
+}

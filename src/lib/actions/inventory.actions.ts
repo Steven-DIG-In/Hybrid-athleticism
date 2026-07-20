@@ -750,18 +750,32 @@ export async function applyAllocation(
                     let setNumber = 1
                     for (const exercise of prescription) {
                         for (const set of exercise.sets) {
-                            await supabase.from('exercise_sets').insert({
-                                user_id: user.id,
-                                workout_id: workout.id,
-                                exercise_name: exercise.name,
-                                muscle_group: exercise.muscleGroup,
-                                set_number: setNumber++,
-                                target_reps: set.targetReps,
-                                target_weight_kg: set.targetWeightKg,
-                                target_rir: set.targetRir,
-                                notes: set.notes,
-                                is_amrap: set.isAmrap ?? false,
-                            })
+                            // Discarded, this produced an allocated lifting day
+                            // with some or all of its sets missing while the
+                            // dashboard reported the week as allocated.
+                            const { error: setInsertErr } = await supabase
+                                .from('exercise_sets').insert({
+                                    user_id: user.id,
+                                    workout_id: workout.id,
+                                    exercise_name: exercise.name,
+                                    muscle_group: exercise.muscleGroup,
+                                    set_number: setNumber++,
+                                    target_reps: set.targetReps,
+                                    target_weight_kg: set.targetWeightKg,
+                                    target_rir: set.targetRir,
+                                    notes: set.notes,
+                                    is_amrap: set.isAmrap ?? false,
+                                })
+                            if (setInsertErr) {
+                                console.error(
+                                    `[applyAllocation] set insert failed for ${exercise.name}:`,
+                                    setInsertErr,
+                                )
+                                return {
+                                    success: false,
+                                    error: `Could not write prescription for ${exercise.name}: ${setInsertErr.message}`,
+                                }
+                            }
                         }
                     }
                 }

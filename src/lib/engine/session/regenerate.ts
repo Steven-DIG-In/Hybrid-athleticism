@@ -394,9 +394,16 @@ export async function regenerateSingleSession(
         return { success: false, error: `Failed to save session: ${insertErr?.message}` }
     }
 
-    // Insert exercise_sets for LIFTING sessions
+    // Insert exercise_sets for LIFTING sessions. See generate-pool: an empty
+    // lifting workout must not be reported as a regenerated session.
     if (session.modality === 'LIFTING') {
-        await insertLiftingSets(supabase, workout.id, user.id, session)
+        const setsResult = await insertLiftingSets(supabase, workout.id, user.id, session)
+        if (!setsResult.ok) {
+            return {
+                success: false,
+                error: `Could not write exercises for "${session.name}": ${setsResult.error}`,
+            }
+        }
     }
 
     revalidatePath('/dashboard')
