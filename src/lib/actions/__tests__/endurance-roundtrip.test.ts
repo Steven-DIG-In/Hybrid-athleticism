@@ -80,6 +80,17 @@ describe('endurance prescription round-trip', () => {
                         // Idempotency-guard count read + generic list reads.
                         if (table === 'session_inventory') return resolve({ data: null, count: 0, error: null })
                         if (table === 'workouts') return resolve({ data: [], error: null })
+                        if (table === 'microcycles') {
+                            // Grid read by rebaseMicrocyclesFromWeek; week 2 starts
+                            // today so the rebase is a no-op here.
+                            const today = new Date().toISOString().split('T')[0]
+                            const plus = (d: number) =>
+                                new Date(Date.parse(today) + d * 86_400_000).toISOString().split('T')[0]
+                            return resolve({
+                                data: [{ id: 'micro-1', week_number: 2, start_date: today, end_date: plus(6) }],
+                                error: null,
+                            })
+                        }
                         return resolve({ data: null, error: null })
                     },
                 }

@@ -48,6 +48,21 @@ vi.mock('@/lib/supabase/server', () => {
                 if (table === 'workouts') {
                     return resolve({ data: [], error: null })
                 }
+                if (table === 'microcycles') {
+                    // Grid read by rebaseMicrocyclesFromWeek. Week 2 starts today,
+                    // so the rebase is a no-op and this test stays focused on the
+                    // idempotency guard.
+                    const today = new Date().toISOString().split('T')[0]
+                    const plus = (d: number) =>
+                        new Date(Date.parse(today) + d * 86_400_000).toISOString().split('T')[0]
+                    return resolve({
+                        data: [
+                            { id: 'micro-0', week_number: 1, start_date: plus(-7), end_date: plus(-1) },
+                            { id: 'micro-1', week_number: 2, start_date: today, end_date: plus(6) },
+                        ],
+                        error: null,
+                    })
+                }
                 return resolve({ data: null, error: null })
             },
         }

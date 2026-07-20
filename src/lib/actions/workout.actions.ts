@@ -481,6 +481,33 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             if (exactWeek) {
                 currentWeek = exactWeek
             } else {
+                // No week contains today — the athlete is between weeks or has
+                // been away. `block_pointer` is the app's own record of where
+                // they actually are, so trust it before falling back to calendar
+                // guesses. Without this the dashboard lands on the last week of
+                // the block after any extended break.
+                const { data: pointer } = await supabase
+                    .from('block_pointer')
+                    .select('week_number')
+                    .eq('user_id', user.id)
+                    .eq('mesocycle_id', currentMesocycle.id)
+                    .order('week_number', { ascending: false })
+                    .limit(1)
+                    .maybeSingle()
+
+                if (pointer?.week_number) {
+                    const { data: pointerWeek } = await supabase
+                        .from('microcycles')
+                        .select('*')
+                        .eq('mesocycle_id', currentMesocycle.id)
+                        .eq('user_id', user.id)
+                        .eq('week_number', pointer.week_number)
+                        .maybeSingle()
+                    if (pointerWeek) currentWeek = pointerWeek
+                }
+            }
+
+            if (!currentWeek) {
                 const { data: nextWeek } = await supabase
                     .from('microcycles')
                     .select('*')

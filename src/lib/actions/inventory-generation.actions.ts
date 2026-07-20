@@ -16,6 +16,7 @@ import type { ActionResult } from '@/lib/types/training.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generateSessionPool } from '@/lib/engine/microcycle/generate-pool'
 import { suggestAllocation, applyAllocation } from './inventory.actions'
+import { rebaseMicrocyclesFromWeek } from '@/lib/engine/scheduling/rebase-microcycles'
 
 type Supa = SupabaseClient<Database>
 
@@ -210,6 +211,24 @@ export async function generateWeekInventory(
         .single()
     if (mcErr || !microcycle) {
         return { success: false, error: mcErr?.message ?? 'Microcycle not found' }
+    }
+
+    // Anchor this week to today BEFORE anything reads its dates. The block shell
+    // lays weeks down as consecutive calendar weeks at creation time, so an
+    // athlete who has fallen behind would otherwise generate week N into whatever
+    // fortnight the calendar assigned it — in the past — and the dashboard, which
+    // picks the displayed week by date containment, would skip past it entirely.
+    //
+    // Runs before the idempotency guard on purpose: a week that was generated
+    // while stale still needs re-anchoring, and rebasing is a no-op once current.
+    const rebase = await rebaseMicrocyclesFromWeek(
+        supabase as Supa,
+        user.id,
+        microcycle.mesocycle_id,
+        microcycle.week_number,
+    )
+    if (!rebase.ok) {
+        return { success: false, error: `Could not anchor week to today: ${rebase.error}` }
     }
 
     // Idempotency guard: if this week already has inventory, treat generation as
