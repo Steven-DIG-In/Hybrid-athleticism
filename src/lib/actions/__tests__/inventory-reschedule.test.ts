@@ -27,6 +27,9 @@ vi.mock('@/lib/supabase/server', () => {
             select: vi.fn(() => chain),
             update: vi.fn((p: any) => { chain._payload = p; return chain }),
             eq: vi.fn((col: string, v: any) => { chain._filters[col] = v; return chain }),
+            // markSessionsMissed targets rows with .in('id', ids); record the
+            // first id so the shared store lookup below still resolves.
+            in: vi.fn((col: string, vs: any[]) => { chain._filters[col] = vs[0]; return chain }),
             maybeSingle: vi.fn(async () => {
                 if (table === 'workouts' && chain._filters.session_inventory_id) {
                     const match = Array.from(store.values())
@@ -78,7 +81,7 @@ vi.mock('@/lib/supabase/server', () => {
     return { createClient: vi.fn(async () => client) }
 })
 
-import { rebindCalendarDate, rescheduleToToday, markMissed } from '../inventory.actions'
+import { rebindCalendarDate, rescheduleToToday, markSessionsMissed } from '../inventory.actions'
 
 describe('inventory reschedule actions', () => {
     beforeEach(() => { updatesLog.length = 0; vi.clearAllMocks() })
@@ -116,8 +119,9 @@ describe('inventory reschedule actions', () => {
         expect(invUpdate).toBeDefined()
     })
 
-    it('markMissed sets session_inventory.status to missed', async () => {
-        const result = await markMissed('si1')
+    it('markSessionsMissed sets session_inventory.status to missed', async () => {
+        // Superseded the single-id markMissed so there is one path to this state.
+        const result = await markSessionsMissed(['si1'])
         expect(result.success).toBe(true)
         const invUpdate = updatesLog.find(
             u => u.table === 'session_inventory' && u.payload.status === 'missed'

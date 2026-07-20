@@ -11,6 +11,7 @@ import type {
     BodyCompGoal, InjuryBodyArea, InjurySeverity, EquipmentUsageIntent,
 } from './database.types'
 import type { SessionInventory } from './inventory.types'
+import type { StaleCandidate } from '@/lib/analytics/stale-sessions'
 
 // ─── Onboarding payload ───────────────────────────────────────────────────────
 
@@ -143,6 +144,12 @@ export interface DashboardData {
      * `src/components/dashboard/WeekViewClient.tsx`.
      */
     weekViewSessions: WeekViewSession[]
+    /**
+     * Pending sessions left behind in program weeks the athlete has already
+     * moved past. Drives the stale-session triage banner. See
+     * `src/lib/analytics/stale-sessions.ts` for the rule.
+     */
+    staleSessions: StaleCandidate[]
     /**
      * Number of session_inventory rows for the active mesocycle in 'completed'
      * status. Drives whether the quiet "Close block" CTA is rendered in the

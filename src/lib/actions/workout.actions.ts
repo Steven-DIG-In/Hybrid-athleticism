@@ -15,6 +15,7 @@ import type { Workout } from '@/lib/types/database.types'
 import { generatePerformanceDeltas } from '@/lib/actions/performance-deltas.actions'
 import { advanceBlockPointer } from './block-pointer.actions'
 import { recalibrateFromTopSet } from './recalibrate-from-top-set.actions'
+import { selectStaleSessions, type StaleCandidate } from '@/lib/analytics/stale-sessions'
 import type { RecalibrationSummaryEntry } from './recalibrate-from-top-set.actions'
 import { fireBlockEndInterventions } from '@/lib/interventions/block-end-trigger'
 import { evaluateAndFirePattern } from '@/lib/interventions/rolling-pattern-trigger'
@@ -685,6 +686,38 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             }))
     }
 
+    // Sessions left behind in weeks the athlete has already moved past. Read
+    // checked rather than `?? []`-defaulted: a failed query must not be
+    // indistinguishable from a clear backlog, which is how this class of bug
+    // stays invisible.
+    let staleSessions: StaleCandidate[] = []
+    if (currentMesocycle && currentWeek) {
+        const currentWeekNumber = (currentWeek as { week_number: number }).week_number
+        const { data: earlierSessions, error: staleErr } = await supabase
+            .from('session_inventory')
+            .select('id, name, modality, week_number, training_day, status')
+            .eq('user_id', user.id)
+            .eq('mesocycle_id', currentMesocycle.id)
+            .lt('week_number', currentWeekNumber)
+            .eq('status', 'pending')
+
+        if (staleErr) {
+            console.error('[getDashboardData] stale-session query failed', staleErr)
+        } else {
+            staleSessions = selectStaleSessions(
+                (earlierSessions ?? []).map(r => ({
+                    id: r.id,
+                    name: r.name ?? 'Session',
+                    modality: r.modality ?? 'LIFTING',
+                    weekNumber: r.week_number,
+                    trainingDay: r.training_day,
+                    status: r.status ?? 'pending',
+                })),
+                currentWeekNumber,
+            )
+        }
+    }
+
     const completedCount = sessionPool.filter(w => w.is_completed).length
     const totalCount = sessionPool.length
 
@@ -735,6 +768,7 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
             mesocycleEndDate,
             trainingDays,
             weekViewSessions,
+            staleSessions,
             completedSessionCount,
             allSessionsResolved,
         },

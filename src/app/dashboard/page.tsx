@@ -5,6 +5,7 @@ import { DashboardNoActiveBlockEmpty } from "@/components/dashboard/DashboardNoA
 import { CloseBlockCta } from "@/components/dashboard/CloseBlockCta"
 import { CloseBlockNudgeBanner } from "@/components/dashboard/CloseBlockNudgeBanner"
 import { BlockEmptyRecoveryBanner } from "@/components/dashboard/BlockEmptyRecoveryBanner"
+import { StaleSessionsBanner } from "@/components/dashboard/StaleSessionsBanner"
 import { createClient } from "@/lib/supabase/server"
 import { evaluateOverrunSignal } from "@/lib/analytics/overrun-signal"
 import { OverrunSignalBanner } from "@/components/reality-check/OverrunSignalBanner"
@@ -132,6 +133,10 @@ export default async function DashboardPage({
                     blockName={data.currentMesocycle.name}
                 />
             )}
+
+            {/* Sessions stranded in weeks already moved past. Sits lowest in the
+                banner stack — it is a backlog to clear, not a mid-block concern. */}
+            {!blockIsEmpty && <StaleSessionsBanner sessions={data.staleSessions} />}
 
             {/* Session Pool — all interactivity lives in the client component */}
             <SessionPoolClient data={data} blockIsEmpty={blockIsEmpty} />

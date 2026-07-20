@@ -1387,14 +1387,28 @@ export async function rescheduleToToday(
 }
 
 /**
- * Mark a session as missed. The block_pointer advance should already have
- * happened via completeWorkout on the next session; this action is used by
- * day-end rollover logic or a manual athlete override. The session remains
- * recoverable — athlete can drag it to a later date to re-activate.
+ * Mark one or more sessions as missed.
+ *
+ * Until this was wired, `missed` was a status the app could not produce: the
+ * only writer was the `close_mesocycle` RPC, which sweeps every remaining
+ * pending row at block close. Sessions abandoned mid-block stayed `pending`
+ * forever, so adherence, the heatmap, coach-bias and the block retrospective
+ * all counted them as still to come.
+ *
+ * Handles the single and bulk cases through one statement — there is no second
+ * path to the same state.
+ *
+ * The linked `workouts` row is deliberately NOT deleted. Missed is recoverable:
+ * the week view renders a missed card greyed with "drag to reschedule", and
+ * dropping the workout would destroy the prescription behind it.
  */
-export async function markMissed(
-    sessionInventoryId: string
-): Promise<ActionResult<null>> {
+export async function markSessionsMissed(
+    sessionInventoryIds: string[]
+): Promise<ActionResult<{ marked: number }>> {
+    if (sessionInventoryIds.length === 0) {
+        return { success: true, data: { marked: 0 } }
+    }
+
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -1404,11 +1418,11 @@ export async function markMissed(
     const { error } = await supabase
         .from('session_inventory')
         .update({ status: 'missed' })
-        .eq('id', sessionInventoryId)
+        .in('id', sessionInventoryIds)
         .eq('user_id', user.id)
     if (error) return { success: false, error: error.message }
 
     revalidatePath('/dashboard')
-    return { success: true, data: null }
+    return { success: true, data: { marked: sessionInventoryIds.length } }
 }
 
