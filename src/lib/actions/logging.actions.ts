@@ -13,7 +13,8 @@ export interface UpdateExerciseSetInput {
     actualWeightKg: number | null
     rirActual?: number | null
     rpeActual?: number | null
-    notes?: string
+    // No `notes` — see the comment at the update below. Commentary on a set is
+    // owned by generation, not by execution.
 }
 
 /**
@@ -67,7 +68,12 @@ export async function updateExerciseSet(
             actual_weight_kg: input.actualWeightKg,
             rir_actual: input.rirActual ?? null,
             rpe_actual: input.rpeActual ?? null,
-            notes: input.notes ?? null,
+            // `notes` is generation-owned commentary (tempo cues, "AMRAP set",
+            // benchmark markers). The logger never passes it, so writing
+            // `input.notes ?? null` here NULLED the coach's note on every set the
+            // athlete completed. Prescription columns are not the execution
+            // surface's to write — migration 026 now enforces that at the
+            // database level.
             is_pr: isPR,
             logged_at: new Date().toISOString(),
         })

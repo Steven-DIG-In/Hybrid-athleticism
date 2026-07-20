@@ -1,8 +1,48 @@
 # Hybrid Athleticism — Ground-Up Core Rebuild
 
 **Date:** 2026-06-01
-**Status:** Approved design — master decomposition spec
-**Scope:** Architecture of a layer-by-layer rebuild of the training engine. This is the *master* spec; each of the six layers gets its own spec → plan → implementation cycle.
+**Status:** ⚠️ **PARTIALLY RETIRED 2026-07-20.** The six-layer framing is no longer a
+plan of record. See "Retirement" below before using this document.
+**Scope:** Architecture of a layer-by-layer rebuild of the training engine.
+
+---
+
+## Retirement (2026-07-20)
+
+**What happened.** Layer 3 (Endurance) is the only layer genuinely wired: its adapters are
+imported by live generation paths and its data reaches the charts. Layer 1 shipped to
+`src/lib/athlete/` rather than `src/core/athlete/`. Layer 2 is done in name only —
+`StrengthPrescription` is never constructed at runtime, `fromStrengthExercise` and
+`nextSetRecommendation` have zero non-test callers, and the single live export of the whole
+strength domain is `computeSetDelta`, wired to a display readout. Layers 4, 5 and 6 were
+never specced or built, and `src/core/` had not been touched since 2026-07-13.
+
+Meanwhile the work kept happening anyway, in `src/lib/`. The 2026-07-19 prescription-fidelity
+change — *"the logger becomes a pure renderer of the stored prescription"*, *"`target_*` is
+write-once, owned by generation"* — is the Layer 4 charter, executed in full without touching
+`src/core/`. The rebuild's **ideas** were winning; its **architecture** was not being used.
+
+**Decision.** Keep the structural fix, drop the layer framing.
+
+- **RETIRED:** Layers 4 (Execution), 5 (Commentary) and 6 (Coordinator) as named
+  deliverables, and this document's remaining promises about them. Do not write L4/L5/L6
+  specs. Do not treat `src/core/` as the destination for new work.
+- **KEPT:** `src/core/domains/endurance/` — genuinely load-bearing, leave it alone.
+- **DONE INSTEAD (migration 026):** the one change that converts convention into structure.
+  `exercise_sets` column privileges now enforce prescription/execution ownership: UPDATE on
+  `target_reps`, `target_weight_kg`, `target_rir`, `is_amrap` and `notes` is revoked for
+  `authenticated`, leaving generation (INSERT) as the only writer. §3's "pure-convention
+  ownership (no enforcement — what caused the bug)" is no longer how this is enforced.
+
+**Why this was necessary rather than cosmetic.** The convention had already failed in
+production: `updateExerciseSet` wrote `notes: input.notes ?? null`, and because the logger
+never passes notes, **completing a set nulled its coach note** — a layer overwriting another's
+truth, live, while this spec sat here describing the rule it was breaking.
+
+**What remains true.** §1's diagnosis and §3's one rule are correct and worth keeping. The
+bug #2 commentary-lifecycle problem (notes copied through generation → inventory → workout
+with no owner and no clearing step) is **still unfixed** and is now tracked as ordinary
+backlog rather than as "Layer 5".
 
 ---
 
