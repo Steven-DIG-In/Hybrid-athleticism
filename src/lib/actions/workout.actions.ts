@@ -220,7 +220,7 @@ export async function completeWorkout(
         } else if (inventory) {
             const { error: invUpdateErr } = await supabase
                 .from('session_inventory')
-                .update({ status: 'completed' })
+                .update({ status: 'completed', completed_at: new Date().toISOString() })
                 .eq('id', inventory.id)
                 .eq('user_id', user.id)
             if (invUpdateErr) {
@@ -638,7 +638,9 @@ export async function getDashboardData(weekNumber?: number): Promise<ActionResul
                 .map(([dayNumber, sessions]) => ({
                     dayNumber,
                     sessions,
-                    isComplete: sessions.every(s => s.completed_at !== null),
+                    // Keyed off canonical `status` — `completed_at` was not stamped
+                    // before 2026-07-26, so older completed rows have it null.
+                    isComplete: sessions.every(s => s.status === 'completed'),
                 }))
         }
     }

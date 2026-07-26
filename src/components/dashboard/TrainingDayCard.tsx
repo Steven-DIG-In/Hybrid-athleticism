@@ -84,7 +84,9 @@ function SessionRow({ session, workout, index, allDayNumbers }: SessionRowProps)
     const [expanded, setExpanded] = useState(false)
     const config = getConfig(session.modality)
     const Icon = config.icon
-    const isComplete = session.completed_at !== null
+    // Canonical completion signal is `status` — `completed_at` was not stamped
+    // before 2026-07-26, so older completed rows have it null.
+    const isComplete = session.status === 'completed'
 
     return (
         <motion.div

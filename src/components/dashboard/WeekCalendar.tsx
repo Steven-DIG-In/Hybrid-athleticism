@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import type { WorkoutWithSets, DayLoadSummary } from '@/lib/types/training.types'
 import { getLoadStatusColors } from '@/lib/scheduling/load-scoring'
+import { effectiveCalendarDate } from '@/lib/scheduling/effective-date'
 import { LoadInterferenceGraph } from './LoadInterferenceGraph'
 
 // ─── Props ─────────────────────────────────────────────────────────────────
@@ -398,13 +399,14 @@ export function WeekCalendar({
     // Build calendar grid
     const calendarDays = useMemo(() => getMonthDays(viewYear, viewMonth), [viewYear, viewMonth])
 
-    // Group sessions by date — skip unallocated
+    // Group sessions by date — skip unallocated. Completed sessions sit on the
+    // day they were actually done, not the day they were planned for.
     const sessionsByDate = useMemo(() => {
         const map = new Map<string, WorkoutWithSets[]>()
         for (const session of sessions) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             if ((session as any).is_allocated === false) continue
-            const date = session.scheduled_date
+            const date = effectiveCalendarDate(session)
             if (!map.has(date)) map.set(date, [])
             map.get(date)!.push(session)
         }

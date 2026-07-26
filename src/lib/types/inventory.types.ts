@@ -14,6 +14,8 @@ export type SessionPriority = 1 | 2 | 3
 
 export type WorkoutModality = 'LIFTING' | 'CARDIO' | 'METCON' | 'RUCKING' | 'MOBILITY'
 
+export type SessionInventoryStatus = 'pending' | 'active' | 'completed' | 'missed' | 'off_plan'
+
 export interface SessionInventory {
     id: string
     mesocycle_id: string
@@ -34,7 +36,8 @@ export interface SessionInventory {
     scheduled_date: string | null  // ISO date string (legacy, stays NULL in day-based allocation)
     training_day: number | null    // Logical training day within the week (1, 2, 3...)
     session_slot: number | null    // 1 = primary (AM), 2 = secondary (PM two-a-day)
-    completed_at: string | null    // ISO timestamp
+    status: SessionInventoryStatus // canonical lifecycle state
+    completed_at: string | null    // ISO timestamp (only stamped from 2026-07-26; use `status` for completion checks)
     is_approved: boolean
 
     // Coaching context

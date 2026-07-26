@@ -14,8 +14,9 @@ import {
     ChevronRight,
     Calendar,
 } from 'lucide-react'
-import { format, isToday, isPast, parseISO } from 'date-fns'
+import { format, isPast, parseISO } from 'date-fns'
 import type { WorkoutWithSets } from '@/lib/types/training.types'
+import { effectiveCalendarDate } from '@/lib/scheduling/effective-date'
 import { Badge } from '@/components/ui/badge'
 
 interface CurrentWeekSessionsProps {
@@ -33,21 +34,25 @@ const MODALITY_CONFIG: Record<string, { icon: typeof Dumbbell; color: string; ba
 }
 
 export function CurrentWeekSessions({ sessions, weekStartDate, weekEndDate }: CurrentWeekSessionsProps) {
-    // Filter to current week and sort by date
+    // Filter to current week and sort by date. Completed sessions live on the
+    // day they were actually done (completed_date), not the planned day.
     const weekSessions = useMemo(() => {
         return sessions
-            .filter(s => s.scheduled_date >= weekStartDate && s.scheduled_date <= weekEndDate)
-            .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+            .filter(s => {
+                const date = effectiveCalendarDate(s)
+                return date >= weekStartDate && date <= weekEndDate
+            })
+            .sort((a, b) => effectiveCalendarDate(a).localeCompare(effectiveCalendarDate(b)))
     }, [sessions, weekStartDate, weekEndDate])
 
     const todaySessions = useMemo(() => {
         const todayStr = format(new Date(), 'yyyy-MM-dd')
-        return weekSessions.filter(s => s.scheduled_date === todayStr)
+        return weekSessions.filter(s => effectiveCalendarDate(s) === todayStr)
     }, [weekSessions])
 
     const upcomingSessions = useMemo(() => {
         const todayStr = format(new Date(), 'yyyy-MM-dd')
-        return weekSessions.filter(s => s.scheduled_date > todayStr && !s.is_completed)
+        return weekSessions.filter(s => effectiveCalendarDate(s) > todayStr && !s.is_completed)
     }, [weekSessions])
 
     const completedCount = weekSessions.filter(s => s.is_completed).length
@@ -126,7 +131,7 @@ interface SessionCardProps {
 function SessionCard({ session, isToday }: SessionCardProps) {
     const config = MODALITY_CONFIG[session.modality] ?? MODALITY_CONFIG.LIFTING
     const Icon = config.icon
-    const sessionDate = parseISO(session.scheduled_date + 'T00:00:00')
+    const sessionDate = parseISO(effectiveCalendarDate(session) + 'T00:00:00')
     const isOverdue = isPast(sessionDate) && !session.is_completed && !isToday
 
     return (

@@ -128,6 +128,14 @@ describe('completeWorkout state transitions', () => {
         expect(match).toBeDefined()
     })
 
+    it('stamps session_inventory.completed_at alongside the status transition', async () => {
+        await completeWorkout('w1', 45)
+        const match = updatesLog.find(
+            u => u.table === 'session_inventory' && u.payload.status === 'completed'
+        )
+        expect(match?.payload.completed_at).toBeTruthy()
+    })
+
     it('advances block_pointer for the linked mesocycle/week', async () => {
         await completeWorkout('w1', 45)
         expect(advanceCalls).toEqual([{ mesocycleId: 'meso-1', weekNumber: 2 }])
