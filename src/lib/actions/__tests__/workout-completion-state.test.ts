@@ -136,6 +136,38 @@ describe('completeWorkout state transitions', () => {
         expect(match?.payload.completed_at).toBeTruthy()
     })
 
+    it('applies a backdated completedAt to workout and inventory rows', async () => {
+        const iso = '2026-07-21T18:30:00.000Z'
+        await completeWorkout('w1', 45, undefined, { iso, localDate: '2026-07-21' })
+
+        const workoutUpdate = updatesLog.find(
+            u => u.table === 'workouts' && u.payload.is_completed === true
+        )
+        expect(workoutUpdate?.payload.completed_at).toBe(iso)
+
+        const dateUpdate = updatesLog.find(
+            u => u.table === 'workouts' && u.payload.completed_date === '2026-07-21'
+        )
+        expect(dateUpdate).toBeDefined()
+
+        const invUpdate = updatesLog.find(
+            u => u.table === 'session_inventory' && u.payload.status === 'completed'
+        )
+        expect(invUpdate?.payload.completed_at).toBe(iso)
+    })
+
+    it('rejects a completedAt in the future', async () => {
+        const future = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        const result = await completeWorkout('w1', 45, undefined, {
+            iso: future.toISOString(),
+            localDate: future.toISOString().slice(0, 10),
+        })
+        expect(result.success).toBe(false)
+        if (!result.success) {
+            expect(result.error).toMatch(/future/i)
+        }
+    })
+
     it('advances block_pointer for the linked mesocycle/week', async () => {
         await completeWorkout('w1', 45)
         expect(advanceCalls).toEqual([{ mesocycleId: 'meso-1', weekNumber: 2 }])

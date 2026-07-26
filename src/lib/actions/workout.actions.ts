@@ -137,7 +137,14 @@ export interface ConditioningResultInput {
 export async function completeWorkout(
     workoutId: string,
     actualDurationMinutes: number,
-    conditioningResult?: ConditioningResultInput
+    conditioningResult?: ConditioningResultInput,
+    /**
+     * When the athlete actually did the session, for logging a workout after
+     * the fact. `iso` is the full timestamp; `localDate` is the athlete's
+     * local calendar day for that moment (the client knows the timezone, the
+     * server does not). Omitted = completed right now.
+     */
+    completedAt?: { iso: string; localDate: string }
 ): Promise<ActionResult<Workout>> {
     const supabase = await createClient()
 
@@ -146,11 +153,21 @@ export async function completeWorkout(
         return { success: false, error: 'Not authenticated' }
     }
 
+    if (completedAt) {
+        const picked = Date.parse(completedAt.iso)
+        // 5-minute slack absorbs client/server clock skew
+        if (Number.isNaN(picked) || picked > Date.now() + 5 * 60 * 1000) {
+            return { success: false, error: 'Completion time cannot be in the future' }
+        }
+    }
+
+    const completedAtIso = completedAt?.iso ?? new Date().toISOString()
+
     const { data: workout, error } = await supabase
         .from('workouts')
         .update({
             is_completed: true,
-            completed_at: new Date().toISOString(),
+            completed_at: completedAtIso,
             actual_duration_minutes: actualDurationMinutes,
         })
         .eq('id', workoutId)
@@ -178,7 +195,7 @@ export async function completeWorkout(
                 perceived_effort_rpe: conditioningResult.perceivedEffortRpe ?? null,
                 modifications: conditioningResult.modifications ?? null,
                 athlete_notes: conditioningResult.athleteNotes ?? null,
-                logged_at: new Date().toISOString(),
+                logged_at: completedAtIso,
             })
 
         if (condError) {
@@ -197,12 +214,12 @@ export async function completeWorkout(
         })
         : Promise.resolve()
 
-    const today = new Date().toISOString().slice(0, 10)
-
     // Bug #4/#5 fix: set completed_date so load-scoring aggregates correctly.
+    // Backdated completions use the athlete's local day for the picked moment.
+    const completedDate = completedAt?.localDate ?? new Date().toISOString().slice(0, 10)
     await supabase
         .from('workouts')
-        .update({ completed_date: today })
+        .update({ completed_date: completedDate })
         .eq('id', workoutId)
         .eq('user_id', user.id)
 
@@ -220,7 +237,7 @@ export async function completeWorkout(
         } else if (inventory) {
             const { error: invUpdateErr } = await supabase
                 .from('session_inventory')
-                .update({ status: 'completed', completed_at: new Date().toISOString() })
+                .update({ status: 'completed', completed_at: completedAtIso })
                 .eq('id', inventory.id)
                 .eq('user_id', user.id)
             if (invUpdateErr) {

@@ -12,6 +12,7 @@ import { completeWorkout, swapExercise, getExerciseHistory } from "@/lib/actions
 import type { ConditioningResultInput } from "@/lib/actions/workout.actions"
 import { updateExerciseSet, logCardioSession } from "@/lib/actions/logging.actions"
 import { RestTimer, suggestRestSeconds } from "@/components/workout/RestTimer"
+import { CompletedWhenPicker, completedAtFromLocal } from "@/components/workout/CompletedWhenPicker"
 import { ExerciseHistoryPanel } from "@/components/workout/ExerciseHistoryPanel"
 import { CoachNotesBanner } from "@/components/workout/CoachNotesBanner"
 import type { WorkoutWithSets } from "@/lib/types/training.types"
@@ -255,6 +256,9 @@ function ConditioningLogger({
     const [distanceKm, setDistanceKm] = useState("")
     const [avgHeartRate, setAvgHeartRate] = useState("")
 
+    // When the session was actually done — null = just now
+    const [completedWhen, setCompletedWhen] = useState<string | null>(null)
+
     const handleComplete = useCallback(() => {
         startTransition(async () => {
             try {
@@ -322,7 +326,8 @@ function ConditioningLogger({
                 const res = await completeWorkout(
                     workout.id,
                     Math.max(durationMinutes, 1),
-                    conditioningResult
+                    conditioningResult,
+                    completedAtFromLocal(completedWhen)
                 )
                 if (res.success) {
                     router.push('/dashboard')
@@ -336,7 +341,7 @@ function ConditioningLogger({
         })
     }, [workout.id, router, startTransition, isMetcon, isEndurance, format, isRx, rpe, modifications,
         athleteNotes, timeMinutes, timeSeconds, rounds, partialReps, completed, distanceKm, avgHeartRate,
-        setError, startTimeRef])
+        completedWhen, setError, startTimeRef])
 
     return (
         <div className="min-h-screen bg-[#000000] text-white flex flex-col pt-12">
@@ -745,6 +750,13 @@ function ConditioningLogger({
                                 disabled={isPending}
                             />
                         </div>
+
+                        {/* Backdate a completion logged after the fact */}
+                        <CompletedWhenPicker
+                            value={completedWhen}
+                            onChange={setCompletedWhen}
+                            disabled={isPending}
+                        />
                     </div>
                 )}
             </div>
@@ -840,6 +852,8 @@ export function WorkoutLogger({
 
     // End workout confirmation
     const [showEndConfirm, setShowEndConfirm] = useState(false)
+    // When the session was actually done — null = just now
+    const [completedWhen, setCompletedWhen] = useState<string | null>(null)
 
     // Session-close summary (set once completeWorkout returns)
     const [sessionSummary, setSessionSummary] = useState<{
@@ -1070,7 +1084,12 @@ export function WorkoutLogger({
         startTransition(async () => {
             try {
                 const durationMinutes = Math.round((Date.now() - startTimeRef.current) / 60000)
-                const res = await completeWorkout(workout.id, Math.max(durationMinutes, 1))
+                const res = await completeWorkout(
+                    workout.id,
+                    Math.max(durationMinutes, 1),
+                    undefined,
+                    completedAtFromLocal(completedWhen)
+                )
                 if (res.success) {
                     // Show what the session revealed before leaving. The
                     // recalibration result used to be computed and discarded.
@@ -1087,7 +1106,7 @@ export function WorkoutLogger({
                 setError("Network error completing workout. Try again.")
             }
         })
-    }, [workout.id, router, startTransition])
+    }, [workout.id, router, startTransition, completedWhen])
 
     const handleNextOrComplete = useCallback(() => {
         if (activeExerciseIdx < exerciseNames.length - 1) {
@@ -1407,6 +1426,15 @@ export function WorkoutLogger({
                                 </div>
                             </div>
                         )}
+
+                        {/* Backdate a completion logged after the fact */}
+                        <div className="mt-4">
+                            <CompletedWhenPicker
+                                value={completedWhen}
+                                onChange={setCompletedWhen}
+                                disabled={isPending}
+                            />
+                        </div>
 
                         <div className="flex gap-3 mt-4">
                             <Button
