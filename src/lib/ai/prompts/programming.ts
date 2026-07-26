@@ -23,7 +23,7 @@ import {
     EQUIPMENT_CONSTRAINT,
     BODY_COMP_RULES,
 } from './system'
-import { SESSION_POOL_SCHEMA_TEXT, SINGLE_SESSION_SCHEMA_TEXT } from '../schemas/programming'
+import { SESSION_POOL_SCHEMA_TEXT, SINGLE_SESSION_SCHEMA_TEXT, CONDITIONING_TYPES } from '../schemas/programming'
 import type { Profile, AthleteInjury, AthleteBenchmark, RecentTrainingActivity } from '@/lib/types/database.types'
 
 // ─── Types for the programming payload ───────────────────────────────────────
@@ -84,6 +84,14 @@ export interface MesocyclePlanContext {
     weekEmphasis?: string
 }
 
+export interface RecentConditioningSession {
+    name: string
+    /** Format token parsed from coach notes (e.g. "EMOM", "FOR_TIME") — null if unknown */
+    format: string | null
+    /** ISO date the workout was generated */
+    createdAt: string
+}
+
 export interface ProgrammingContext {
     profile: Profile
     injuries: AthleteInjury[]
@@ -96,6 +104,8 @@ export interface ProgrammingContext {
     mesocycleGoal: string
     isBenchmarkDiscovery: boolean
     previousWeekSessions?: PreviousWeekSession[]
+    /** Recent METCON sessions across blocks (most recent first) — drives format rotation */
+    recentConditioning?: RecentConditioningSession[]
     coachAdjustments?: CoachAdjustments
     externalLoads?: ExternalLoad[]
     previousWeekLoadSummary?: WeeklyLoadSummaryContext
@@ -178,6 +188,8 @@ SESSION POOL DESIGN RULES:
    - Respect conditioning_style_preferences (metcon, intervals, circuits, etc.)
    - Only use equipment the athlete has
    - Don't program max-effort conditioning the day before heavy lifting
+   - WEEK-TO-WEEK VARIETY: Conditioning is the most creative domain. Never use the same workout format (${CONDITIONING_TYPES.join(' / ')}) two weeks in a row, and rotate the movement pool — do not anchor every week on the same 2-3 movements. Vary energy system targets across weeks (glycolytic, oxidative, phosphagen, mixed).
+   - The ONLY sanctioned repeat is a designated BENCHMARK workout, deliberately re-tested every 2-3 weeks for progress tracking and labeled as a benchmark in coachNotes. Everything else must be a fresh workout.
 
 10. MOBILITY PROGRAMMING:
     - ALWAYS generate at least 1 standalone mobility session per week (recovery / active rest)
@@ -363,12 +375,19 @@ ${previousWeekSessions.map((s, i) => {
         return `${i + 1}. ${s.name} [${s.modality}]\n${exerciseLines}${s.coachNotes ? `\n    Notes: ${s.coachNotes}` : ''}`
     }).join('\n')}
 
-PROGRESSIVE OVERLOAD INSTRUCTION: Compare Target vs Actual for each exercise.
+PROGRESSIVE OVERLOAD INSTRUCTION (LIFTING sessions only): Compare Target vs Actual for each exercise.
 - If the athlete hit all target reps at the target weight with RIR >= 1: increase weight by 2.5kg (upper body) or 5kg (lower body).
 - If RIR was 0 or they missed reps: hold the weight or reduce slightly. The athlete is at their current limit.
 - If the athlete exceeded the target weight (Actual > Target): they self-regulated up. Use their actual weight as the new baseline.
 - If not logged ("not logged"): hold the prescription from last week.
-- Apply these rules exercise by exercise. Do not reinvent the program — build upon last week's session structure.
+- Apply these rules exercise by exercise. For LIFTING sessions, do not reinvent the program — build upon last week's session structure.
+
+CONDITIONING VARIETY INSTRUCTION (METCON sessions): Last week's conditioning workouts above are load-management context, NOT a template — do not repeat last week's conditioning workout with more rounds or minutes. Rotate format and movements per the conditioning variety rules (designated benchmark repeats excepted).
+` : ''}${ctx.recentConditioning && ctx.recentConditioning.length > 0 ? `
+── RECENT CONDITIONING SESSIONS (most recent first, across blocks) ──
+${ctx.recentConditioning.map(s => `- ${s.createdAt}: "${s.name}"${s.format ? ` [${s.format}]` : ''}`).join('\n')}
+
+FORMAT ROTATION INSTRUCTION: These formats and movements have been used recently. Program this week's conditioning session(s) with a DIFFERENT workout format and a different movement emphasis than the sessions listed above — unless deliberately repeating a designated benchmark workout for progress tracking.
 ` : ''}${ctx.coachAdjustments ? `
 ── COACH ADJUSTMENTS FOR THIS WEEK ──
 Rationale: ${ctx.coachAdjustments.rationale}

@@ -32,6 +32,7 @@ import {
     insertLiftingSets,
     buildCoachNotes,
     mapModality,
+    extractConditioningFormat,
 } from '@/lib/engine/microcycle/persistence'
 import { getAthleteState } from '@/lib/athlete/get-athlete-state'
 import { vdotPacesFromCapability } from '@/core/domains/endurance/from-endurance-session'
@@ -96,8 +97,8 @@ export async function generateSessionPool(
         return { success: false, error: 'Could not load athlete profile' }
     }
 
-    // ─── Step 3: Load injuries, benchmarks, recent training in parallel ──────
-    const [injuriesResult, benchmarksResult, recentTrainingResult] = await Promise.all([
+    // ─── Step 3: Load injuries, benchmarks, recent training, recent metcons in parallel ──
+    const [injuriesResult, benchmarksResult, recentTrainingResult, recentMetconsResult] = await Promise.all([
         supabase
             .from('athlete_injuries')
             .select('*')
@@ -112,6 +113,18 @@ export async function generateSessionPool(
             .from('recent_training_activity')
             .select('*')
             .eq('user_id', user.id),
+        // Recent conditioning sessions for format rotation. Cross-block on
+        // purpose: week 1 of a fresh block must still see the previous block's
+        // formats, or every new block re-converges on the same workout.
+        // Excludes this microcycle so regeneration doesn't see itself.
+        supabase
+            .from('workouts')
+            .select('name, coach_notes, created_at')
+            .eq('user_id', user.id)
+            .eq('modality', 'METCON')
+            .neq('microcycle_id', microcycleId)
+            .order('created_at', { ascending: false })
+            .limit(4),
     ])
 
     // A failed read must NOT look like "no injuries, no benchmarks". `?? []`
@@ -128,10 +141,19 @@ export async function generateSessionPool(
     if (recentTrainingResult.error) {
         console.error('[generateSessionPool] recent_training_activity read failed', recentTrainingResult.error)
     }
+    if (recentMetconsResult.error) {
+        // Format-rotation context is best-effort — degrade to no-context, don't block generation
+        console.error('[generateSessionPool] recent metcons read failed', recentMetconsResult.error)
+    }
 
     const injuries = injuriesResult.data ?? []
     const benchmarks = benchmarksResult.data ?? []
     const recentTraining = recentTrainingResult.data ?? []
+    const recentConditioning = (recentMetconsResult.data ?? []).map(w => ({
+        name: w.name,
+        format: extractConditioningFormat(w.coach_notes),
+        createdAt: (w.created_at ?? '').split('T')[0],
+    }))
 
     // Deduplicate benchmarks — keep only latest per benchmark_name
     const latestBenchmarks = deduplicateBenchmarks(benchmarks)
@@ -365,6 +387,7 @@ export async function generateSessionPool(
         mesocycleGoal: mesocycleData.goal,
         isBenchmarkDiscovery,
         previousWeekSessions,
+        recentConditioning: recentConditioning.length > 0 ? recentConditioning : undefined,
         coachAdjustments,
         externalLoads: externalLoads.length > 0 ? externalLoads : undefined,
         previousWeekLoadSummary,
@@ -426,6 +449,22 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
     }
 
     const sessionPool = aiResult.data
+
+    // Rotation check: the variety instruction is prompt-space only, so verify
+    // it was followed and leave a trace when it wasn't. Warning, not retry —
+    // a deliberate benchmark repeat is sanctioned.
+    const lastConditioningFormat = recentConditioning[0]?.format
+    if (lastConditioningFormat) {
+        const repeats = sessionPool.sessions.filter(s =>
+            s.modality === 'METCON' &&
+            s.conditioningType?.toUpperCase() === lastConditioningFormat
+        )
+        if (repeats.length > 0) {
+            console.warn(
+                `[generateSessionPool] conditioning format "${lastConditioningFormat}" repeated from the most recent metcon despite rotation instruction: ${repeats.map(s => s.name).join(', ')} (OK only if a designated benchmark)`
+            )
+        }
+    }
 
     // ─── Step 7: Delete existing workouts for this microcycle (re-generation) ─
     // This allows regeneration — delete old workouts + sets before inserting new ones

@@ -59,13 +59,17 @@ export const EnduranceSessionSchema = z.object({
 
 // ─── Conditioning Session Schema ────────────────────────────────────────────
 
+/** Single source of truth for conditioning workout formats — the schema enum,
+ * the coach-notes format parser, and the prompt format lists all derive from it. */
+export const CONDITIONING_TYPES = [
+    'metcon', 'amrap', 'emom', 'for_time', 'intervals', 'circuit', 'chipper',
+] as const
+
 export const ConditioningSessionSchema = z.object({
     name: z.string().describe('Session name (e.g., "Metcon — Chipper", "Assault Bike Intervals")'),
     modality: z.literal('METCON'),
     estimatedDurationMinutes: z.number().int().min(10).max(90),
-    conditioningType: z.enum([
-        'metcon', 'amrap', 'emom', 'for_time', 'intervals', 'circuit', 'chipper',
-    ]).describe('Type of conditioning workout'),
+    conditioningType: z.enum(CONDITIONING_TYPES).describe('Type of conditioning workout'),
     workoutDescription: z.string().describe('Full workout description in standard notation (e.g., "21-15-9 of: Thrusters (95/65), Pull-ups")'),
     targetIntensity: z.enum(['moderate', 'high', 'max_effort']),
     equipmentNeeded: z.array(z.string()).describe('List of equipment required'),

@@ -22,6 +22,7 @@ import {
 import type { AthleteContextPacket, CoachingTeamEntry } from '@/lib/types/coach-context'
 import type { RecoveryAssessmentValidated } from '../schemas/week-brief'
 import { ARCHETYPE_DEFAULTS, type Archetype } from '@/lib/wizard/archetypes'
+import { CONDITIONING_TYPES } from '../schemas/programming'
 
 // ─── Head Coach Identity ────────────────────────────────────────────────────
 
@@ -79,6 +80,11 @@ INTERFERENCE MANAGEMENT:
 - High-CNS conditioning and heavy lifting should not be on the same day.
 - Endurance volume should not compromise strength recovery for spinal loading movements.
 - State these as explicit constraints in each domain's allocation.
+
+METHODOLOGY DIRECTIVE RULES:
+- Directives express INTENT — the weekly generator owns implementation. Anything concrete you write (a workout format, an example workout, a named movement pool) will be reproduced verbatim every single week of the block, so never include literal example workouts in any directive.
+- For conditioning specifically: specify energy system targets, weekly dose (duration ranges), intensity ceilings, and recovery constraints — but do NOT prescribe specific workout formats (${CONDITIONING_TYPES.join(', ')}). The weekly generator rotates formats for variety; pinning a format here locks the athlete into the same workout for the whole block.
+- Movement/equipment constraints for recovery reasons (e.g. "low eccentric load near heavy lifting days") belong in constraints, phrased as the reason plus the property to preserve — not as a fixed 2-3 item equipment list to use every week.
 
 RESPONSE SCHEMA:
 ${MESOCYCLE_STRATEGY_SCHEMA_TEXT}

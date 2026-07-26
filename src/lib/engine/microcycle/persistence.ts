@@ -19,6 +19,24 @@ import type {
     ConditioningSession,
     MobilitySession,
 } from '@/lib/ai/schemas/programming'
+import { CONDITIONING_TYPES } from '@/lib/ai/schemas/programming'
+
+/**
+ * Pull the conditioning format token back out of a persisted METCON
+ * coach_notes blob. buildCoachNotes (below) writes the meta line as
+ * `conditioningType.toUpperCase()` — this is its read-side counterpart, so
+ * the two must co-evolve. Falls back to scanning the workout prose (older
+ * rows), including the space-variant "FOR TIME".
+ */
+const CONDITIONING_FORMAT_REGEX = new RegExp(
+    `\\b(${[...CONDITIONING_TYPES.map(t => t.toUpperCase()), 'FOR TIME'].join('|')})\\b`
+)
+
+export function extractConditioningFormat(coachNotes: string | null): string | null {
+    if (!coachNotes) return null
+    const match = coachNotes.toUpperCase().match(CONDITIONING_FORMAT_REGEX)
+    return match ? match[1].replace(' ', '_') : null
+}
 
 /**
  * Map AI schema modality to DB workout_modality enum.
