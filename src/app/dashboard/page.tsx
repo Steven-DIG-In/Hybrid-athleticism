@@ -9,6 +9,8 @@ import { StaleSessionsBanner } from "@/components/dashboard/StaleSessionsBanner"
 import { createClient } from "@/lib/supabase/server"
 import { evaluateOverrunSignal } from "@/lib/analytics/overrun-signal"
 import { OverrunSignalBanner } from "@/components/reality-check/OverrunSignalBanner"
+import { CheckInBanner } from "@/components/dashboard/CheckInBanner"
+import { getDueCheckIn } from "@/lib/actions/check-in.actions"
 
 // Lazy next-week generation (generateNextWeekPool / regenerateCurrentWeekPool)
 // runs as a Server Action on this route and makes a single large Claude call
@@ -90,6 +92,12 @@ export default async function DashboardPage({
         cooldownMinutes: 0,
     }
 
+    // Weekly check-in. Read-only here — asking whether one is due must not advance the
+    // coaching cycle just because the dashboard rendered.
+    const dueCheckIn = data.currentWeek
+        ? await getDueCheckIn(data.currentMesocycle.id, data.currentWeek.week_number)
+        : null
+
     // Greeting based on time of day
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -111,6 +119,10 @@ export default async function DashboardPage({
                     )}
                 </div>
             </div>
+
+            {dueCheckIn?.due && !dueCheckIn.alreadyReported && (
+                <CheckInBanner weekNumber={dueCheckIn.weekNumber} />
+            )}
 
             {overrunSignal.shouldFire && overrunSignal.evidence && (
                 <OverrunSignalBanner

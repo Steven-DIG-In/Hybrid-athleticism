@@ -8,7 +8,7 @@ Personal multi-agent AI coaching platform. Single real user (Steven, Supabase au
 ## Commands
 
 - `npm run dev` — Next dev server on port 3001 (not 3000).
-- `npm test` — `vitest run`; suite is 468 passing + 1 todo. `npm run test:watch` for watch mode. Tests live in `src/**/__tests__/`, mock Supabase via `vi.mock` + `vi.hoisted` — no DB access.
+- `npm test` — `vitest run`; suite is 476 passing + 1 todo. `npm run test:watch` for watch mode. Tests live in `src/**/__tests__/`, mock Supabase via `vi.mock` + `vi.hoisted` — no DB access.
 - `npm run build` / `npm run lint` — standard Next build and eslint.
 - One-off probes live in `scripts/` (`test-engine.ts`, `introspect-db.ts`, …) — run with `npx tsx`.
 
@@ -24,7 +24,7 @@ Personal multi-agent AI coaching platform. Single real user (Steven, Supabase au
 - Block model: `mesocycles` (4–8 week blocks) → `microcycles` (weeks) → `session_inventory` (AI-generated sessions). Generation pipeline lives in `src/lib/engine/`; the canonical per-week path is `generateWeekInventory()` in `src/lib/actions/inventory-generation.actions.ts`.
 - **Prescription/execution ownership is enforced by Postgres column grants** (migration 026), not convention: `exercise_sets.target_*` are write-once (UPDATE revoked), `actual_*`/`logged_at` are the athlete's. Guard test: `__tests__/prescription-ownership.test.ts`.
 - `src/core/` is a retired rebuild — do not put new work there. The one live piece is `src/core/domains/endurance/` (immutable endurance prescriptions, wired into generation and `/data/endurance`). Everything else ships in `src/lib/`.
-- Known half-built area: the check-in/readiness loop. `submitSelfReport` (`src/lib/actions/check-in.actions.ts`) has zero callers and `athlete_self_reports` has 0 rows — durable fact, not a regression.
+- **Check-in/readiness loop — wired 2026-09-07** (was the known half-built area). All three stages existed with ZERO callers: `checkAndTriggerCheckIn`, `submitSelfReport` and `runCheckInCycle`. Consequence: `athlete_self_reports` stayed empty, all 14 `check_in_windows` sat at `open`, `getReadiness` could only ever return `UNKNOWN`, and `runCheckInCycle` ran on its neutral fallbacks — pinning ~35% of the recovery weighting (sleep/energy/stress/motivation/soreness) to a constant. Now: `/dashboard/check-in` form → `completeWeeklyCheckIn` (report → trigger → cycle, in that order — the trigger writes the completion counters the cycle reads). The due-check (`getDueCheckIn`) is READ-ONLY by design; viewing the dashboard must never advance the coaching cycle. The scheduling rule is pure and unit-tested in `src/lib/check-in/trigger.ts`.
 
 ## Gotchas
 
