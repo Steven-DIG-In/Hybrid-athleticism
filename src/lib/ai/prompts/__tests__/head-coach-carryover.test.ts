@@ -4,7 +4,11 @@ import type { AthleteContextPacket } from '@/lib/types/coach-context'
 
 function makeCtx(aiContextJson: Record<string, unknown>): AthleteContextPacket {
     return {
-        profile: { equipment_list: [], goal_archetype: 'hybrid_fitness', available_days: 7, session_duration_minutes: 75 },
+        profile: {
+            equipment_list: [], goal_archetype: 'hybrid_fitness', available_days: 7, session_duration_minutes: 75,
+            training_maxes: { back_squat: { trainingMaxKg: 87 }, 'Barbell Row': { trainingMaxKg: 80 } },
+        },
+        totalWeeks: 4,
         coachingTeam: [{ coach: 'strength', priority: 1 }],
         injuries: [{
             body_area: 'other', severity: 'moderate', is_active: true, movements_to_avoid: [],
@@ -34,5 +38,17 @@ describe('head-coach strategy user prompt', () => {
     it('shows recent training', () => {
         const prompt = buildMesocycleStrategyUserPrompt(makeCtx({ mode: 'post-block', archetype: 'hybrid', carryover }))
         expect(prompt).toContain('swimming: 3x/week, ~1.5km open water')
+    })
+
+    it('states the block length so the strategy covers exactly those weeks', () => {
+        const prompt = buildMesocycleStrategyUserPrompt(makeCtx({ mode: 'post-block', archetype: 'hybrid', carryover }))
+        expect(prompt).toContain('Length: 4 weeks')
+        expect(prompt).toContain('week 4 is the deload')
+    })
+
+    it('shows the stored main-lift training maxes, not accessory entries', () => {
+        const prompt = buildMesocycleStrategyUserPrompt(makeCtx({ mode: 'post-block', archetype: 'hybrid', carryover }))
+        expect(prompt).toContain('back squat: 87 kg')
+        expect(prompt).not.toContain('Barbell Row')
     })
 })

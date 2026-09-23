@@ -33,6 +33,16 @@ vi.mock('@/lib/supabase/server', () => ({
                     }),
                 }
             }
+            if (table === 'profiles') {
+                return {
+                    update: vi.fn((payload: any) => ({
+                        eq: vi.fn(async () => {
+                            state.profileUpdates.push(payload)
+                            return { error: null }
+                        }),
+                    })),
+                }
+            }
             return {}
         }),
     })),
@@ -47,6 +57,7 @@ describe('createBlockShell', () => {
         state.mesoCount = 0
         state.insertedMesos = []
         state.insertedMicros = []
+        state.profileUpdates = []
         state.authUser = { id: 'user-1' }
     })
 
@@ -87,6 +98,16 @@ describe('createBlockShell', () => {
         expect(state.insertedMesos[0].ai_context_json.archetype).toBe('custom')
         expect(state.insertedMesos[0].ai_context_json.customCounts.strength).toBe(3)
         expect(state.insertedMesos[0].ai_context_json.carryover.daysPerWeek).toBe(4)
+    })
+
+    it('writes the wizard availability through to the profile the scheduler reads', async () => {
+        await createBlockShell({
+            mode: 'post-block',
+            archetype: 'hybrid',
+            durationWeeks: 4,
+            carryover: { daysPerWeek: 4, sessionMinutes: 50, warmupMinutes: 10, cooldownMinutes: 0, freeText: '' },
+        }, 5)
+        expect(state.profileUpdates).toEqual([{ available_days: 4, session_duration_minutes: 50 }])
     })
 
     it('rejects unauthenticated callers', async () => {

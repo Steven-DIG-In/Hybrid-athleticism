@@ -99,6 +99,9 @@ export async function createBlockShell(
     const { error: microErr } = await supabase.from('microcycles').insert(microcycles)
     if (microErr) return { success: false, error: `Microcycle scaffold failed: ${microErr.message}` }
 
+    const syncErr = await syncProfileAvailability(supabase, user.id, input.carryover)
+    if (syncErr) return { success: false, error: syncErr }
+
     revalidatePath('/data/blocks/new')
     return { success: true, data: { mesocycleId: meso.id } }
 }
@@ -150,5 +153,29 @@ export async function updateBlockShellContext(
         .eq('user_id', user.id)
     if (writeErr) return { success: false, error: writeErr.message }
 
+    const syncErr = await syncProfileAvailability(supabase, user.id, input.carryover)
+    if (syncErr) return { success: false, error: syncErr }
+
     return { success: true, data: null }
+}
+
+/**
+ * The wizard's availability is the athlete's newest answer, but the scheduler
+ * (autoAllocateWeek), the weekly programming prompt and the head coach's
+ * SCHEDULE section all read profiles.available_days / session_duration_minutes.
+ * Without this write-through a block planned for 4 days was allocated across 7.
+ */
+async function syncProfileAvailability(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    userId: string,
+    carryover: CreateBlockShellInput['carryover'],
+): Promise<string | null> {
+    const { error } = await supabase
+        .from('profiles')
+        .update({
+            available_days: carryover.daysPerWeek,
+            session_duration_minutes: carryover.sessionMinutes,
+        })
+        .eq('id', userId)
+    return error ? `Could not save availability to profile: ${error.message}` : null
 }

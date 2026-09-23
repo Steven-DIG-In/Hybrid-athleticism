@@ -23,6 +23,7 @@ import type { AthleteContextPacket, CoachingTeamEntry } from '@/lib/types/coach-
 import type { RecoveryAssessmentValidated } from '../schemas/week-brief'
 import { ARCHETYPE_DEFAULTS, type Archetype } from '@/lib/wizard/archetypes'
 import { CONDITIONING_TYPES } from '../schemas/programming'
+import type { MainLiftKey } from '@/lib/training/exercise-key'
 
 // ─── Head Coach Identity ────────────────────────────────────────────────────
 
@@ -43,6 +44,8 @@ You think in SYSTEMS, not movements:
 ${SHARED_DEFINITIONS}`
 
 // ─── Mesocycle Strategy (Pipeline A Step 1) ─────────────────────────────────
+
+const MAIN_LIFTS: readonly MainLiftKey[] = ['back_squat', 'bench_press', 'deadlift', 'overhead_press']
 
 export function buildMesocycleStrategySystemPrompt(): string {
     return `${HEAD_COACH_IDENTITY}
@@ -126,6 +129,15 @@ export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket): str
             .map(rt => `${rt.modality}: ${rt.frequency_per_week}x/week${rt.approximate_volume ? `, ~${rt.approximate_volume}` : ''}`)
             .join('\n')
         : 'No recent training data'
+
+    // The 5/3/1 loads are computed from these stored maxes, not from benchmarks.
+    // Without them the head coach guessed ("85% of benchmarks") at a number the
+    // athlete had already reset.
+    const trainingMaxes = (profile.training_maxes ?? {}) as Record<string, { trainingMaxKg?: number }>
+    const trainingMaxStr = MAIN_LIFTS
+        .filter(k => trainingMaxes[k]?.trainingMaxKg != null)
+        .map(k => `${k.replace(/_/g, ' ')}: ${trainingMaxes[k].trainingMaxKg} kg`)
+        .join(', ') || 'None stored — coaches will use estimation'
 
     const benchmarkStr = benchmarks.length > 0
         ? benchmarks.map(b => `${b.benchmark_name}: ${b.value} ${b.unit}`).join(', ')
@@ -224,6 +236,9 @@ Body Comp Goal: ${profile.body_comp_goal ?? 'no preference'}
 ── COACHING TEAM (ranked by priority) ──
 ${teamStr}
 
+── BLOCK ──
+Length: ${ctx.totalWeeks} weeks — totalWeeks and weeklyEmphasis must cover exactly weeks 1-${ctx.totalWeeks}; week ${ctx.totalWeeks} is the deload.
+
 ── SCHEDULE ──
 Available Days: ${profile.available_days}/week
 Session Duration: ${profile.session_duration_minutes} minutes
@@ -248,6 +263,10 @@ ${injuryStr}
 
 ── RECENT TRAINING ──
 ${recentTrainingStr}
+
+── CURRENT TRAINING MAXES ──
+${trainingMaxStr}
+These are already set for this athlete's current state. Lifting loads are computed from them — do not discount or re-derive them in your directives.
 
 ── KNOWN BENCHMARKS ──
 ${benchmarkStr}
