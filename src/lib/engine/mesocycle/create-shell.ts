@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types/training.types'
 import type { CoachDomain } from '@/lib/skills/types'
+import { ARCHETYPE_GOALS } from '@/lib/wizard/archetypes'
 
 export type Archetype =
     | 'hypertrophy'
@@ -55,7 +56,7 @@ export async function createBlockShell(
         .insert({
             user_id: user.id,
             name,
-            goal: input.archetype.toUpperCase(),
+            goal: ARCHETYPE_GOALS[input.archetype],
             week_count: input.durationWeeks,
             start_date: startDate.toISOString().split('T')[0],
             is_active: false,

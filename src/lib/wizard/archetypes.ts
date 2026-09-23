@@ -1,4 +1,5 @@
 import type { CoachDomain } from '@/lib/skills/types'
+import type { MesocycleGoal } from '@/lib/types/database.types'
 
 export type Archetype =
     | 'hypertrophy'
@@ -45,4 +46,17 @@ export function defaultsFor(
         } as Record<CoachDomain, number>
     }
     return ARCHETYPE_DEFAULTS[archetype]
+}
+
+// mesocycles.goal is the mesocycle_goal enum (HYPERTROPHY | STRENGTH | ENDURANCE |
+// HYBRID_PEAKING), which is narrower than the archetype list — upper-casing the
+// archetype produced HYBRID / CONDITIONING / CUSTOM and the insert was rejected.
+// Mirrors the onboarding goal map: everything balanced lands on HYBRID_PEAKING.
+export const ARCHETYPE_GOALS: Record<Archetype, MesocycleGoal> = {
+    hypertrophy: 'HYPERTROPHY',
+    strength: 'STRENGTH',
+    endurance_event: 'ENDURANCE',
+    conditioning: 'HYBRID_PEAKING',
+    hybrid: 'HYBRID_PEAKING',
+    custom: 'HYBRID_PEAKING',
 }
