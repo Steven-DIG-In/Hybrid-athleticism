@@ -139,6 +139,7 @@ SESSION POOL DESIGN RULES:
    - "endurance_focus": Endurance emphasis — 1-2 lifting (maintenance), 2-3 endurance, 0-1 conditioning, 0-1 mobility
    - "conditioning_focus": Conditioning emphasis — 1-2 lifting, 1 endurance, 2 conditioning, 0-1 mobility
    - "longevity": Moderate across all — 2 lifting, 1 endurance, 1 conditioning, 1 mobility
+   When a HEAD COACH'S BRIEF is provided, its per-coach "Sessions this week" counts override this table (strength + hypertrophy both count as lifting).
 
 3. SESSION DURATION: Respect the athlete's session_duration_minutes. If they said 60 minutes, don't generate 90-minute lifting sessions.
 
@@ -486,7 +487,7 @@ export function buildSingleSessionUserPrompt(ctx: SingleSessionContext): string 
         : 'Unknown / minimal'
 
     const injuryStr = injuries.length > 0
-        ? injuries.filter(i => i.is_active).map(i => `${i.body_area} (${i.severity})`).join(', ')
+        ? injuries.filter(i => i.is_active).map(i => `${i.body_area} (${i.severity}): ${i.description || 'No description'}`).join(', ')
         : 'None'
 
     const benchmarkStr = benchmarks.length > 0

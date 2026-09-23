@@ -157,14 +157,39 @@ const ARCHETYPE_DISTRIBUTION: Record<string, {
     HYPERTROPHY:        { lifting: [2, 4], endurance: [0, 2], conditioning: [0, 2], mobility: [1, 2] },
 }
 
+export type ModalityRanges = (typeof ARCHETYPE_DISTRIBUTION)[string]
+
 /**
- * Creates a session pool schema with archetype-based distribution validation.
- * Falls back to the base schema if the archetype is unknown.
+ * Turns a per-coach session request (the head coach's domainAllocations, or the
+ * block's archetype counts) into per-modality ranges, ±tolerance each. Strength
+ * and hypertrophy both land on LIFTING; recovery counts as MOBILITY.
  */
-export function createValidatedSessionPoolSchema(goalArchetype: string) {
+export function rangesFromCoachCounts(
+    counts: Partial<Record<string, number>>,
+    tolerance = 1,
+): ModalityRanges {
+    const n = (...coaches: string[]) => coaches.reduce((sum, c) => sum + (counts[c] ?? 0), 0)
+    const range = (x: number): [number, number] => [Math.max(0, x - tolerance), x + tolerance]
+    return {
+        lifting: range(n('strength', 'hypertrophy')),
+        endurance: range(n('endurance')),
+        conditioning: range(n('conditioning')),
+        mobility: range(n('mobility', 'recovery')),
+    }
+}
+
+/**
+ * Creates a session pool schema with distribution validation. `requested` (what
+ * this block asked for) wins; the static archetype table is only the fallback for
+ * blocks with no strategy or wizard counts. Validating against the profile-level
+ * archetype alone capped every block at 3 lifting sessions — the retry loop fed
+ * "Fix the session mix" back until the AI dropped the 4th and 5th.
+ */
+export function createValidatedSessionPoolSchema(goalArchetype: string, requested?: ModalityRanges) {
+    const label = requested ? 'requested block' : goalArchetype
     return WeeklySessionPoolSchema
         .superRefine((data, ctx) => {
-            const ranges = ARCHETYPE_DISTRIBUTION[goalArchetype]
+            const ranges = requested ?? ARCHETYPE_DISTRIBUTION[goalArchetype]
             if (!ranges) return // Unknown archetype, skip validation
 
             const lifting = data.sessions.filter(s => s.modality === 'LIFTING').length
@@ -181,7 +206,7 @@ export function createValidatedSessionPoolSchema(goalArchetype: string) {
             if (!valid) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
-                    message: `Session distribution violates ${goalArchetype} archetype. Got: ${lifting} lifting (want ${ranges.lifting}), ${endurance} endurance (want ${ranges.endurance}), ${conditioning} conditioning (want ${ranges.conditioning}), ${mobility} mobility (want ${ranges.mobility}). Fix the session mix.`,
+                    message: `Session distribution violates ${label} distribution. Got: ${lifting} lifting (want ${ranges.lifting}), ${endurance} endurance (want ${ranges.endurance}), ${conditioning} conditioning (want ${ranges.conditioning}), ${mobility} mobility (want ${ranges.mobility}). Fix the session mix.`,
                     path: ['sessions'],
                 })
             }

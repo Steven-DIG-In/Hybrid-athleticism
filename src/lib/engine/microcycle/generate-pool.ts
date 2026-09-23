@@ -16,7 +16,8 @@ import { revalidatePath } from 'next/cache'
 import type { ActionResult, WorkoutWithSets } from '@/lib/types/training.types'
 import type { Workout } from '@/lib/types/database.types'
 import { generateStructuredResponse } from '@/lib/ai/client'
-import { createValidatedSessionPoolSchema } from '@/lib/ai/schemas/programming'
+import { createValidatedSessionPoolSchema, rangesFromCoachCounts } from '@/lib/ai/schemas/programming'
+import { ARCHETYPE_DEFAULTS, type Archetype } from '@/lib/wizard/archetypes'
 import type { WeeklySessionPool } from '@/lib/ai/schemas/programming'
 import type { ProgrammingContext, PreviousWeekSession } from '@/lib/ai/prompts/programming'
 import {
@@ -432,7 +433,17 @@ Constraints: ${brief.constraints.join('; ') || '(none)'}`
     const userPrompt = baseUserPrompt + weekBriefSection
 
     const goalArchetype = profile.goal_archetype ?? mesocycleData.goal ?? 'hybrid_fitness'
-    const validatedSchema = createValidatedSessionPoolSchema(goalArchetype)
+    // Validate against what this block asked for: the head coach's allocation,
+    // else the wizard's counts. Only legacy blocks fall back to the archetype table.
+    const blockArchetype = aiCtx.archetype as Archetype | undefined
+    const requestedCounts: Partial<Record<string, number>> | null = strategy
+        ? Object.fromEntries(strategy.domainAllocations.map(d => [d.coach, d.sessionsPerWeek]))
+        : (aiCtx.customCounts as Record<string, number> | null)
+            ?? (blockArchetype && blockArchetype !== 'custom' ? ARCHETYPE_DEFAULTS[blockArchetype] : null)
+    const validatedSchema = createValidatedSessionPoolSchema(
+        goalArchetype,
+        requestedCounts ? rangesFromCoachCounts(requestedCounts) : undefined,
+    )
 
     const aiResult = await generateStructuredResponse({
         systemPrompt,

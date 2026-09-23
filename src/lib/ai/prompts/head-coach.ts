@@ -93,7 +93,7 @@ ${JSON_RESPONSE_RULES}`
 }
 
 export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket): string {
-    const { profile, coachingTeam, injuries, benchmarks } = ctx
+    const { profile, coachingTeam, injuries, benchmarks, recentTraining } = ctx
 
     const teamStr = coachingTeam
         .sort((a, b) => a.priority - b.priority)
@@ -115,9 +115,17 @@ export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket): str
     const injuryStr = injuries.length > 0
         ? injuries
             .filter(i => i.is_active)
-            .map(i => `${i.body_area} (${i.severity}): avoid ${i.movements_to_avoid?.join(', ') || 'none specified'}`)
+            .map(i => `${i.body_area} (${i.severity}): ${i.description || 'No description'}. Avoid: ${i.movements_to_avoid?.join(', ') || 'none specified'}`)
             .join('; ')
         : 'None'
+
+    // Same rendering as the weekly programming prompt — the head coach sets the
+    // block's load and previously planned it without seeing current training.
+    const recentTrainingStr = recentTraining.length > 0
+        ? recentTraining
+            .map(rt => `${rt.modality}: ${rt.frequency_per_week}x/week${rt.approximate_volume ? `, ~${rt.approximate_volume}` : ''}`)
+            .join('\n')
+        : 'No recent training data'
 
     const benchmarkStr = benchmarks.length > 0
         ? benchmarks.map(b => `${b.benchmark_name}: ${b.value} ${b.unit}`).join(', ')
@@ -154,8 +162,10 @@ Missed sessions: ${r.missedSessions.length}
 Use this to inform domain emphasis and load — what worked, what didn't.`)
     }
 
-    // 2. Athlete's stated reality (post-block: from pendingPlannerNotes.availability)
-    if (ctx.pendingPlannerNotes?.availability) {
+    // 2. Athlete's stated reality (from reality-check) — only when the wizard didn't
+    // capture availability itself; the wizard prefills from these notes, so its
+    // carryover is the newer answer.
+    if (ctx.pendingPlannerNotes?.availability && !aiCtx?.carryover) {
         const a = ctx.pendingPlannerNotes.availability
         const effective = a.sessionMinutes - a.warmupMinutes - a.cooldownMinutes
         const free = ctx.pendingPlannerNotes.freeText
@@ -168,8 +178,10 @@ ${free ? `Free text: ${free}` : ''}
 Treat these as authoritative. Total weekly load budget is ${a.daysPerWeek * effective} effective minutes. Plan within this budget. If the free text mentions equipment or modality preferences (e.g. "no barbell", "calisthenics-focused", "swim instead of run", "open water access"), treat those as overrides to the profile-level equipment list and methodology preferences for this block.`)
     }
 
-    // 3. Athlete's availability (first-block: from wizard's AvailabilityForm via ai_context_json.carryover)
-    if (aiCtx?.mode === 'first-block' && aiCtx.carryover) {
+    // 3. Athlete's availability (from the wizard's AvailabilityForm via ai_context_json.carryover).
+    // Used in both modes: gating this on first-block meant a post-block wizard's
+    // days, session length and notes never reached the head coach.
+    if (aiCtx?.carryover) {
         const c = aiCtx.carryover
         const effective = c.sessionMinutes - c.warmupMinutes - c.cooldownMinutes
         carryoverSections.push(`── ATHLETE'S AVAILABILITY ──
@@ -233,6 +245,9 @@ Travel Frequency: ${profile.travel_frequency ?? 'Unknown'}
 
 ── INJURIES ──
 ${injuryStr}
+
+── RECENT TRAINING ──
+${recentTrainingStr}
 
 ── KNOWN BENCHMARKS ──
 ${benchmarkStr}

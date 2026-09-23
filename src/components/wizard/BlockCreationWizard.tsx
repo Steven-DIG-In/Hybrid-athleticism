@@ -16,7 +16,6 @@ import { approveBlockPlan } from '@/lib/engine/mesocycle/approve'
 import { loadWeek1Preview, type Week1PreviewSession } from '@/lib/engine/mesocycle/load-week1-preview'
 
 import { RetrospectiveSummaryTile } from './RetrospectiveSummaryTile'
-import { CarryoverSummary } from './CarryoverSummary'
 import { AvailabilityForm, type AvailabilityValue } from './AvailabilityForm'
 import { ArchetypePicker } from './ArchetypePicker'
 import { SessionCountSteppers } from './SessionCountSteppers'
@@ -69,7 +68,7 @@ export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: Blo
   const [customCounts, setCustomCounts] = useState<Record<CoachDomain, number>>(CUSTOM_DEFAULTS)
   const [durationWeeks, setDurationWeeks] = useState<4 | 6 | 8>(6)
 
-  // Carryover form (first-block edits inline; post-block edits via RealityCheckForm modal)
+  // Carryover form — editable in both modes, prefilled from any reality-check notes
   const initialCarryover: AvailabilityValue =
     pendingNotes?.availability
       ? {
@@ -301,8 +300,7 @@ export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: Blo
       </header>
 
       {mode === 'post-block' && retrospective && <RetrospectiveSummaryTile retrospective={retrospective} />}
-      {mode === 'post-block' && pendingNotes && <CarryoverSummary notes={pendingNotes} />}
-      {mode === 'first-block' && <AvailabilityForm value={carryover} onChange={setCarryover} />}
+      <AvailabilityForm value={carryover} onChange={setCarryover} />
 
       <ArchetypePicker value={archetype} onChange={setArchetype} />
       {archetype === 'custom' && (
