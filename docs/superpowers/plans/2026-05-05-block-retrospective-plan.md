@@ -2502,10 +2502,10 @@ Use the Supabase MCP `execute_sql` tool:
 ```sql
 SELECT id, mesocycle_id, generated_at, snapshot -> 'adherence' -> 'overall' AS adherence
 FROM block_retrospectives
-WHERE user_id = (SELECT id FROM auth.users WHERE email = 'incubatepro@gmail.com');
+WHERE user_id = (SELECT id FROM auth.users WHERE email = '<auth-email>');
 
 SELECT id, name, is_active, is_complete, completed_at FROM mesocycles
-WHERE user_id = (SELECT id FROM auth.users WHERE email = 'incubatepro@gmail.com')
+WHERE user_id = (SELECT id FROM auth.users WHERE email = '<auth-email>')
 ORDER BY start_date DESC LIMIT 3;
 
 SELECT count(*) FILTER (WHERE status='missed') AS missed,
@@ -2514,7 +2514,7 @@ FROM session_inventory
 WHERE mesocycle_id = '50ccb2aa-61e8-470c-8404-966064c31cef';
 
 SELECT id, decision_type, target_entity, reasoning_text, created_at FROM agent_activity
-WHERE user_id = (SELECT id FROM auth.users WHERE email = 'incubatepro@gmail.com')
+WHERE user_id = (SELECT id FROM auth.users WHERE email = '<auth-email>')
   AND decision_type = 'block_close'
 ORDER BY created_at DESC LIMIT 1;
 

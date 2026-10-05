@@ -1685,7 +1685,7 @@ Then in a browser at `http://localhost:3001/data/blocks/50ccb2aa-61e8-470c-8404-
 ```sql
 SELECT pending_planner_notes
 FROM profiles
-WHERE id = (SELECT id FROM auth.users WHERE email = 'incubatepro@gmail.com');
+WHERE id = (SELECT id FROM auth.users WHERE email = '<auth-email>');
 ```
 
 Expected: JSON with `schemaVersion=1, source='block_close', capturedAt`, `availability` matching what you entered, `freeText` if entered.
@@ -1697,7 +1697,7 @@ Re-navigate to the reality-check page. Confirm the form pre-fills with the value
 ```sql
 SELECT pending_planner_notes
 FROM profiles
-WHERE id = (SELECT id FROM auth.users WHERE email = 'incubatepro@gmail.com');
+WHERE id = (SELECT id FROM auth.users WHERE email = '<auth-email>');
 ```
 
 Expected: `availability.warmupMinutes` is the new value (20); other availability fields unchanged from previous write. `capturedAt` updated. `freeText` either appended (if you entered new text) or unchanged (if you didn't).

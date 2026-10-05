@@ -1,6 +1,6 @@
 # Hybrid-Athleticism
 
-Personal multi-agent AI coaching platform. Single real user (Steven, Supabase auth `incubatepro@gmail.com`); the architecture is multi-user ready but only one athlete exists — **his rows are live production training data**.
+Personal multi-agent AI coaching platform. Single real user (Steven); the architecture is multi-user ready but only one athlete exists — **his rows are live production training data**.
 
 - **Stack:** Next.js 16 App Router, React 19, TypeScript 5, Supabase (Postgres, RLS, Vault, Storage), `@anthropic-ai/sdk`, Vitest 4, Tailwind 4.
 - **GitHub:** `Steven-DIG-In/Hybrid-athleticism` · **Supabase project:** `kuqgtholljrxnbxtmrnz` (EU-West-1).

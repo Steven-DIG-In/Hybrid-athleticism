@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **`exercise_sets.target_*` columns are WRITE-ONCE**, owned by generation. The execution surface must never write targets. (Existing contract at `src/lib/actions/logging.actions.ts:87-90` — do not weaken it.)
-- **Never run destructive tests against live data.** Steven's Supabase auth user `incubatepro@gmail.com` is the single production row and he is actively training. No `DELETE`/wipe scoped to a live user id. Use `vi.mock` + `vi.hoisted` in-memory Supabase mocks (reference: `src/lib/actions/__tests__/log-off-plan.test.ts`), or additive-only fixtures cleaned by explicit id.
+- **Never run destructive tests against live data.** Steven's Supabase auth user `<auth-email>` is the single production row and he is actively training. No `DELETE`/wipe scoped to a live user id. Use `vi.mock` + `vi.hoisted` in-memory Supabase mocks (reference: `src/lib/actions/__tests__/log-off-plan.test.ts`), or additive-only fixtures cleaned by explicit id.
 - **The training-max rekey migration (Task 2) must be non-destructive.** Existing `profiles.training_maxes` entries that are not main lifts are *preserved untouched*, not deleted.
 - **Prod deploy = `git push origin main`.** Gate before pushing: `npm install` first (local `node_modules` misses `garmin-connect` + `@react-pdf/renderer`), then full `npx vitest run` and `npx next build` both green.
 - **Supabase type regen clobbers hand-written aliases.** After applying any migration, snapshot the hand-written alias appendix at the end of `src/lib/types/database.types.ts` before regenerating, and re-append it after. See `~/.claude/memory/feedback/supabase-type-regen-clobbers-aliases.md`.

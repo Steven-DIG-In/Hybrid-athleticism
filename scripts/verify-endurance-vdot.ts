@@ -10,8 +10,8 @@
  *   zone + target pace. A genuine generation; persists NOTHING.
  *
  * Usage:
- *   npx tsx scripts/verify-endurance-vdot.ts
- *   npx tsx scripts/verify-endurance-vdot.ts --call-ai
+ *   npx tsx scripts/verify-endurance-vdot.ts --email=<address>
+ *   npx tsx scripts/verify-endurance-vdot.ts --email=<address> --call-ai
  */
 
 import { readFileSync, existsSync } from 'fs'
@@ -34,10 +34,11 @@ function loadEnv() {
   }
 }
 
-const USER_EMAIL = 'incubatepro@gmail.com'
+const USER_EMAIL = process.argv.find(a => a.startsWith('--email='))?.slice('--email='.length)
 
 async function main() {
   loadEnv()
+  if (!USER_EMAIL) throw new Error('Pass the athlete login with --email=<address>')
   const callAi = process.argv.includes('--call-ai')
 
   const supabase = createClient(
