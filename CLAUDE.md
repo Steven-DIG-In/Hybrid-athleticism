@@ -14,7 +14,7 @@ Personal multi-agent AI coaching platform. Single real user (Steven, Supabase au
 
 ## Database and deploy
 
-- Migrations are plain SQL in `supabase/migrations/` (001–026), applied through the Supabase MCP — there is no local Supabase CLI stack. After a migration, regenerate types via MCP and re-append the hand-written alias block (it gets clobbered; see memory feedback `supabase-type-regen-clobbers-aliases`).
+- Migrations are plain SQL in `supabase/migrations/` (001–027), applied through the Supabase MCP — there is no local Supabase CLI stack. After a migration, regenerate types via MCP and re-append the hand-written alias block (it gets clobbered; see memory feedback `supabase-type-regen-clobbers-aliases`).
 - Supabase free tier auto-pauses the project (happened 09-07, 09-23) — if queries fail with ECONNREFUSED, `restore_project` via MCP first.
 - Env in `.env.local` (see `.env.example`): Supabase URL/anon/service-role, `ANTHROPIC_API_KEY`, `CRON_SECRET`.
 - Deploy = push to `main`; Vercel auto-deploys (no local `.vercel/` link). `vercel.json` runs one cron: `/api/cron/garmin-sync` daily 07:00. Vercel Hobby plan — route `maxDuration` caps at 300.
