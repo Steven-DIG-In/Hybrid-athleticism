@@ -15,7 +15,9 @@ import { regenerateBlockPlan } from '@/lib/engine/mesocycle/regenerate'
 import { approveBlockPlan } from '@/lib/engine/mesocycle/approve'
 import { loadWeek1Preview, type Week1PreviewSession } from '@/lib/engine/mesocycle/load-week1-preview'
 
+import type { AthleteInjury } from '@/lib/types/database.types'
 import { RetrospectiveSummaryTile } from './RetrospectiveSummaryTile'
+import { ActiveInjuriesCheck } from './ActiveInjuriesCheck'
 import { AvailabilityForm, type AvailabilityValue } from './AvailabilityForm'
 import { ArchetypePicker } from './ArchetypePicker'
 import { SessionCountSteppers } from './SessionCountSteppers'
@@ -28,6 +30,7 @@ export interface BlockCreationWizardProps {
   retrospective: BlockRetrospectiveSnapshot | null
   pendingNotes: PendingPlannerNotes | null
   orphan: OrphanBlock | null
+  activeInjuries: AthleteInjury[]
 }
 
 type WizardStep = 'review' | 'generating' | 'preview'
@@ -50,7 +53,7 @@ const CUSTOM_DEFAULTS: Record<CoachDomain, number> = {
   recovery: 0,
 }
 
-export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: BlockCreationWizardProps) {
+export function BlockCreationWizard({ retrospective, pendingNotes, orphan, activeInjuries }: BlockCreationWizardProps) {
   const router = useRouter()
   const mode: 'first-block' | 'post-block' = retrospective ? 'post-block' : 'first-block'
 
@@ -300,6 +303,7 @@ export function BlockCreationWizard({ retrospective, pendingNotes, orphan }: Blo
       </header>
 
       {mode === 'post-block' && retrospective && <RetrospectiveSummaryTile retrospective={retrospective} />}
+      <ActiveInjuriesCheck injuries={activeInjuries} />
       <AvailabilityForm value={carryover} onChange={setCarryover} />
 
       <ArchetypePicker value={archetype} onChange={setArchetype} />

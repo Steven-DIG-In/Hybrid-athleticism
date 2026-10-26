@@ -13,6 +13,7 @@
  * 2. Targeted Modification (Pipeline B) — adjust a single week's sessions
  */
 
+import { formatInjuries } from './athlete-history'
 import {
     SHARED_DEFINITIONS,
     JSON_RESPONSE_RULES,
@@ -147,12 +148,7 @@ export function buildHypertrophyProgramUserPrompt(
         ? profile.equipment_list.join(', ')
         : 'Unknown / minimal'
 
-    const injuryStr = injuries.length > 0
-        ? injuries
-            .filter(i => i.is_active)
-            .map(i => `${i.body_area} (${i.severity}): avoid ${i.movements_to_avoid?.join(', ') || 'none specified'}`)
-            .join('; ')
-        : 'None'
+    const injuryStr = formatInjuries(injuries) ?? 'None'
 
     const otherDomainsStr = brief.otherDomainsThisWeek
         .map(d => `  ${d.domain}: ${d.sessionCount} sessions, load budget ${d.loadBudget}/10`)

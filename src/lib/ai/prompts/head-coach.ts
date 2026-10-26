@@ -9,6 +9,7 @@
  * 3. AdjustmentDirective (Pipeline B Step 3) — targeted modification orders
  */
 
+import { formatInjuries, formatRecentTraining } from './athlete-history'
 import {
     HYBRID_MEDIATOR_IDENTITY,
     TRAINING_PHILOSOPHY,
@@ -95,7 +96,7 @@ ${MESOCYCLE_STRATEGY_SCHEMA_TEXT}
 ${JSON_RESPONSE_RULES}`
 }
 
-export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket): string {
+export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket, now: Date = new Date()): string {
     const { profile, coachingTeam, injuries, benchmarks, recentTraining } = ctx
 
     const teamStr = coachingTeam
@@ -115,20 +116,12 @@ export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket): str
         ? profile.equipment_list.join(', ')
         : 'Unknown / minimal'
 
-    const injuryStr = injuries.length > 0
-        ? injuries
-            .filter(i => i.is_active)
-            .map(i => `${i.body_area} (${i.severity}): ${i.description || 'No description'}. Avoid: ${i.movements_to_avoid?.join(', ') || 'none specified'}`)
-            .join('; ')
-        : 'None'
+    // Dated, so a return-from-layoff note written weeks ago doesn't read as today.
+    const injuryStr = formatInjuries(injuries, now) ?? 'None'
 
     // Same rendering as the weekly programming prompt — the head coach sets the
     // block's load and previously planned it without seeing current training.
-    const recentTrainingStr = recentTraining.length > 0
-        ? recentTraining
-            .map(rt => `${rt.modality}: ${rt.frequency_per_week}x/week${rt.approximate_volume ? `, ~${rt.approximate_volume}` : ''}`)
-            .join('\n')
-        : 'No recent training data'
+    const recentTrainingStr = formatRecentTraining(recentTraining, now) ?? 'No recent training data'
 
     // The 5/3/1 loads are computed from these stored maxes, not from benchmarks.
     // Without them the head coach guessed ("85% of benchmarks") at a number the
@@ -162,16 +155,35 @@ export function buildMesocycleStrategyUserPrompt(ctx: AthleteContextPacket): str
         const byDomain = Object.entries(r.adherence.byCoachDomain)
             .map(([coachDomain, d]) => `  - ${coachDomain}: ${d.completed}/${d.prescribed} (${d.pct}%)`)
             .join('\n')
+        // Execution quality and per-lift recalibrations are the performance
+        // evidence; without them the coach saw only adherence counts and fell
+        // back on older injury text to judge the athlete's state.
+        const execution = Object.entries(r.executionQuality?.byCoachDomain ?? {})
+            .filter(([, e]) => e.sessionsWithDeltas > 0)
+            .map(([coachDomain, e]) => {
+                const c = e.classificationCounts
+                const sign = e.meanDeltaPct > 0 ? '+' : ''
+                return `  - ${coachDomain}: ${e.sessionsWithDeltas} sessions, mean ${sign}${e.meanDeltaPct}% vs prescription (over ${c.over} / on ${c.on} / under ${c.under} sets)`
+            })
+            .join('\n')
+        // Chronological, one entry per distinct change: a per-lift first→last
+        // rollup hid progress whenever a later entry started from a lower max.
+        const recalStr = [...new Set(r.recalibrations
+            .map(rc => `${rc.exerciseName} ${rc.fromKg}→${rc.toKg} kg (${rc.occurredAt.slice(0, 10)})`))]
+            .join(', ')
         carryoverSections.push(`── LAST BLOCK'S ACTUALS ──
 Block: ${r.block.name}
+Dates: ${r.block.startDate} → ${r.block.endDate} (${r.block.weekCount} weeks)
 Adherence: ${r.adherence.overall.completed}/${r.adherence.overall.prescribed} (${r.adherence.overall.pct}%)
 By coach domain:
 ${byDomain || '  (none)'}
-Recalibrations: ${r.recalibrations.length}
+Execution vs prescription:
+${execution || '  (no logged sets)'}
+Training-max recalibrations: ${recalStr || 'none'}
 Interventions: ${r.interventions.length}
 Missed sessions: ${r.missedSessions.length}
 
-Use this to inform domain emphasis and load — what worked, what didn't.`)
+The athlete has completed this block. It is more recent than any injury or recent-training entry recorded before ${r.block.endDate}: where they disagree, this block describes the athlete's current state — do not plan a return-to-training or re-introduction phase on the strength of older notes. Use this to inform domain emphasis and load — what worked, what didn't.`)
     }
 
     // 2. Athlete's stated reality (from reality-check) — only when the wizard didn't

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getLatestBlockRetrospective } from '@/lib/actions/block-retrospective.actions'
 import { getPendingPlannerNotes } from '@/lib/actions/pending-notes.actions'
 import { findOrphanBlock } from '@/lib/engine/mesocycle/find-orphan'
+import { getActiveInjuries } from '@/lib/actions/injuries.actions'
 import { BlockCreationWizard } from '@/components/wizard/BlockCreationWizard'
 
 export const dynamic = 'force-dynamic'
@@ -16,15 +17,17 @@ export default async function NewBlockPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [retroResult, notesResult, orphanResult] = await Promise.all([
+  const [retroResult, notesResult, orphanResult, injuriesResult] = await Promise.all([
     getLatestBlockRetrospective(),
     getPendingPlannerNotes(),
     findOrphanBlock(),
+    getActiveInjuries(),
   ])
 
   const retrospective = retroResult.success ? retroResult.data : null
   const pendingNotes = notesResult.success ? notesResult.data : null
   const orphan = orphanResult.success ? orphanResult.data : null
+  const activeInjuries = injuriesResult.success ? injuriesResult.data : []
 
   return (
     <div className="min-h-screen bg-neutral-950 py-10">
@@ -32,6 +35,7 @@ export default async function NewBlockPage() {
         retrospective={retrospective}
         pendingNotes={pendingNotes}
         orphan={orphan}
+        activeInjuries={activeInjuries}
       />
     </div>
   )

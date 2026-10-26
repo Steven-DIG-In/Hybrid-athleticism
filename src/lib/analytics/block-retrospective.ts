@@ -7,7 +7,6 @@ import {
 import {
   type BlockRetrospectiveSnapshot,
   type RecalibrationEntry,
-  type RecalibrationSource,
   type RecalibrationTrigger,
   type InterventionEntry,
   type InterventionUserResponse,
@@ -30,6 +29,11 @@ function withPct(c: Omit<AdherenceCounts, 'pct'>): AdherenceCounts {
 
 /** Pure assembler — loads everything needed and returns the typed snapshot.
  *  No mutations; safe to call as a dry-run for the pre-close confirm modal. */
+/** evaluateRecalibration's drift tier → the snapshot's trigger label. */
+const TIER_TRIGGER: Record<string, RecalibrationTrigger> = {
+  visible: 'drift_lt_5', logged: 'drift_5_to_10', intervention: 'drift_gt_10',
+}
+
 export async function buildBlockRetrospectiveSnapshot(
   mesocycleId: string,
 ): Promise<BlockRetrospectiveSnapshot> {
@@ -172,17 +176,20 @@ export async function buildBlockRetrospectiveSnapshot(
   }
 
   // ─── Recalibrations from agent_activity ──────────────────────────────
+  // Keys follow what evaluateRecalibration actually writes: target_entity.exercise
+  // and reasoning_structured.{previousMax,newMax,tier}. This read snake_case keys
+  // no writer produced, so every retrospective recorded 'Unknown 0→0'.
   const recalibrations: RecalibrationEntry[] = (agentRows ?? [])
     .filter((r: any) => r.decision_type === 'recalibration')
     .map((r: any) => {
       const target = r.target_entity ?? {}
       const reason = r.reasoning_structured ?? {}
       return {
-        exerciseName: String(target.exercise_name ?? 'Unknown'),
-        fromKg: Number(reason.from_kg ?? 0),
-        toKg: Number(reason.to_kg ?? 0),
-        source: ((reason.source as RecalibrationSource) ?? 'manual'),
-        triggeredBy: ((reason.triggered_by as RecalibrationTrigger) ?? 'manual'),
+        exerciseName: String(target.exercise ?? 'Unknown'),
+        fromKg: Number(reason.previousMax ?? 0),
+        toKg: Number(reason.newMax ?? 0),
+        source: 'recalibration' as const,
+        triggeredBy: TIER_TRIGGER[reason.tier] ?? 'manual',
         occurredAt: String(r.created_at),
       }
     })

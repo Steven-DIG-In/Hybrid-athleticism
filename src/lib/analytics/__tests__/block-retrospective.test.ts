@@ -155,20 +155,19 @@ describe('buildBlockRetrospectiveSnapshot', () => {
       {
         id: 'a1', user_id: USER, coach: 'strength',
         decision_type: 'recalibration',
-        target_entity: { exercise_name: 'Bench Press' },
+        // Shape written by evaluateRecalibration (recalibration.actions.ts)
+        target_entity: { type: 'training_max', exercise: 'Bench Press' },
         reasoning_structured: {
-          from_kg: 75, to_kg: 72,
-          source: 'recalibration', triggered_by: 'drift_5_to_10',
+          previousMax: 75, newMax: 72, driftPct: -0.04, tier: 'logged',
         },
         created_at: '2026-04-24T05:25:37Z',
       },
       {
         id: 'a2', user_id: USER, coach: 'strength',
         decision_type: 'recalibration',
-        target_entity: { exercise_name: 'Overhead Press' },
+        target_entity: { type: 'training_max', exercise: 'Overhead Press' },
         reasoning_structured: {
-          from_kg: 52, to_kg: 49.5,
-          source: 'intervention_response', triggered_by: 'drift_gt_10',
+          previousMax: 52, newMax: 49.5, driftPct: -0.0481, tier: 'visible',
         },
         created_at: '2026-04-24T05:26:05Z',
       },
@@ -200,6 +199,10 @@ describe('buildBlockRetrospectiveSnapshot', () => {
     expect(snap.recalibrations[0]).toMatchObject({
       exerciseName: 'Bench Press', fromKg: 75, toKg: 72,
       source: 'recalibration', triggeredBy: 'drift_5_to_10',
+    })
+    expect(snap.recalibrations[1]).toMatchObject({
+      exerciseName: 'Overhead Press', fromKg: 52, toKg: 49.5,
+      source: 'recalibration', triggeredBy: 'drift_lt_5',
     })
     expect(snap.interventions).toHaveLength(1)
     expect(snap.interventions[0].userResponse).toBe('keep')

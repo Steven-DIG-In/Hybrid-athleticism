@@ -15,6 +15,7 @@
  * - Benchmark discovery status (what to test in weeks 1-2)
  */
 
+import { formatInjuries, formatRecentTraining } from './athlete-history'
 import {
     HYBRID_MEDIATOR_IDENTITY,
     TRAINING_PHILOSOPHY,
@@ -239,7 +240,7 @@ ${JSON_RESPONSE_RULES}`
 
 // ─── User Prompt ─────────────────────────────────────────────────────────────
 
-export function buildProgrammingUserPrompt(ctx: ProgrammingContext): string {
+export function buildProgrammingUserPrompt(ctx: ProgrammingContext, now: Date = new Date()): string {
     const { profile, injuries, benchmarks, recentTraining, weekNumber, totalWeeks, isDeload, targetRir, mesocycleGoal, isBenchmarkDiscovery, previousWeekSessions } = ctx
 
     // Build athlete profile section
@@ -265,12 +266,7 @@ export function buildProgrammingUserPrompt(ctx: ProgrammingContext): string {
         : 'None specified'
 
     // Build injury section
-    const injuryStr = injuries.length > 0
-        ? injuries
-            .filter(i => i.is_active)
-            .map(i => `${i.body_area} (${i.severity}): ${i.description || 'No description'}. Avoid: ${i.movements_to_avoid?.join(', ') || 'none specified'}`)
-            .join('\n  ')
-        : 'None reported'
+    const injuryStr = formatInjuries(injuries, now, '\n  ') ?? 'None reported'
 
     // Build movements to avoid
     const movementsToAvoid = profile.movements_to_avoid?.length > 0
@@ -285,11 +281,8 @@ export function buildProgrammingUserPrompt(ctx: ProgrammingContext): string {
         : 'No benchmarks reported — use estimation'
 
     // Build recent training section
-    const recentTrainingStr = recentTraining.length > 0
-        ? recentTraining
-            .map(rt => `${rt.modality}: ${rt.frequency_per_week}x/week${rt.approximate_volume ? `, ~${rt.approximate_volume}` : ''}`)
-            .join(', ')
-        : 'No recent training data — starting from scratch'
+    const recentTrainingStr = formatRecentTraining(recentTraining, now, ', ')
+        ?? 'No recent training data — starting from scratch'
 
     // Build methodology section
     const methodologyStr = [
@@ -486,9 +479,7 @@ export function buildSingleSessionUserPrompt(ctx: SingleSessionContext): string 
         ? profile.equipment_list.join(', ')
         : 'Unknown / minimal'
 
-    const injuryStr = injuries.length > 0
-        ? injuries.filter(i => i.is_active).map(i => `${i.body_area} (${i.severity}): ${i.description || 'No description'}`).join(', ')
-        : 'None'
+    const injuryStr = formatInjuries(injuries, new Date(), ', ') ?? 'None'
 
     const benchmarkStr = benchmarks.length > 0
         ? benchmarks.map(b => `${b.benchmark_name}: ${b.value} ${b.unit}`).join(', ')

@@ -13,6 +13,7 @@
  * 2. Targeted Modification (Pipeline B) — adjust a single week's sessions
  */
 
+import { formatInjuries } from './athlete-history'
 import {
     SHARED_DEFINITIONS,
     JSON_RESPONSE_RULES,
@@ -169,12 +170,7 @@ export function buildEnduranceProgramUserPrompt(
         ? profile.endurance_modality_preferences.join(', ')
         : 'Running (default)'
 
-    const injuryStr = injuries.length > 0
-        ? injuries
-            .filter(i => i.is_active)
-            .map(i => `${i.body_area} (${i.severity}): avoid ${i.movements_to_avoid?.join(', ') || 'none specified'}`)
-            .join('; ')
-        : 'None'
+    const injuryStr = formatInjuries(injuries) ?? 'None'
 
     const enduranceBenchmarks = benchmarks.filter(b =>
         ['5k', '10k', 'mile', '1_mile', 'half_marathon', 'marathon', '2k_row', '500m_row']
