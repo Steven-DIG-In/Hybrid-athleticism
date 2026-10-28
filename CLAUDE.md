@@ -8,7 +8,7 @@ Personal multi-agent AI coaching platform. Single real user (Steven); the archit
 ## Commands
 
 - `npm run dev` — Next dev server on port 3001 (not 3000).
-- `npm test` — `vitest run`; suite is 487 passing + 1 todo. `npm run test:watch` for watch mode. Tests live in `src/**/__tests__/`, mock Supabase via `vi.mock` + `vi.hoisted` — no DB access.
+- `npm test` — `vitest run`; suite is 496 passing + 1 todo. `npm run test:watch` for watch mode. Tests live in `src/**/__tests__/`, mock Supabase via `vi.mock` + `vi.hoisted` — no DB access.
 - `npm run build` / `npm run lint` — standard Next build and eslint.
 - One-off probes live in `scripts/` (`test-engine.ts`, `introspect-db.ts`, …) — run with `npx tsx`.
 
@@ -38,7 +38,8 @@ Personal multi-agent AI coaching platform. Single real user (Steven); the archit
 - The live interventions table is `ai_coach_interventions` (not `agent_interventions`); modality enums are uppercase (`LIFTING`, `CARDIO`, …) — lowercase comparisons silently match nothing.
 - Allocation signal is `training_day`, not `scheduled_date` (which stays null on inventory even after auto-allocate).
 - `profiles.coaching_team` beats the block archetype — a coach missing from the team is dropped by the head coach.
-- `recent_training_activity` and `athlete_injuries` are written only by onboarding; there is no manual training-max UI. Data fixes = SQL replicating the owning action (`setTrainingMax` also writes `athlete_capabilities`).
+- `recent_training_activity` is written only by onboarding; `athlete_injuries` by onboarding plus the post-block wizard's "Still current?" tile (`resolveInjury`). There is no manual training-max UI. Data fixes = SQL replicating the owning action (`setTrainingMax` also writes `athlete_capabilities`).
+- Every coach prompt renders injuries and recent training through `src/lib/ai/prompts/athlete-history.ts` (dated, stale-flagged). Don't hand-roll another renderer — an undated return-from-illness note made the head coach plan a "Post-Pneumonia Rebuild" a month after the athlete was back (2026-10-26).
 - `medical_events` feeds only the doctor report and health snapshot — never coach context.
 - Coach prompts must demand intent, not example workouts — literal examples in a directive get reproduced verbatim every week (the 2026-07-26 conditioning-variety bug).
 
